@@ -1,0 +1,53 @@
+{
+    "crawl_rules": [
+      {
+        "from": ".*/browse/periodicals/title$",
+        "to": [
+          ".*punumber=.*"
+        ]
+      },
+      {
+        "from": ".*punumber=.*",
+        "to": [
+          ".*document/[0-9]+/$"
+        ]
+      },
+      {
+        "from": ".*academic.oup.com/ajhp$",
+        "to": [
+          ".*/ajhp/issue/.*"
+        ]
+      }
+    ],
+    "metadata_extraction": [
+      {
+        "url_pattern": ".*academic.oup.com/journals",
+        "fields": {
+          "issn": "document.querySelector('.issn-field').innerText",
+          "journal_links": "Array.from(document.querySelectorAll('a.journal-link')).map(a =\u003E a.href)"
+        }
+      },
+      {
+        "url_pattern": ".*academic.*/journals_a_to_z",
+        "fields": {
+          "articles_links": "Array.from(document.querySelectorAll('a.article-link')).map(a =\u003E a.href)"
+        }
+      }
+    ],
+    "actions_before_extraction": [
+      {
+        "url_pattern": ".*academic.oup.com/ajhp/issue/.*",
+        "actions": [
+          "document.querySelector('.issue-title').scrollIntoView()"
+        ]
+      }
+    ],
+    "actions_after_extraction": [
+      {
+        "url_pattern": ".*academic.oup.com/ajhp/issue/.*",
+        "actions": [
+          "document.querySelector('.issue-title').scrollIntoView()"
+        ]
+      }
+    ]
+  }
