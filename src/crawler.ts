@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
+import { changeTorIp } from './utils/tor-config';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -35,15 +36,19 @@ function initializeFrontier(seedFilePath: string): URLFrontier {
 }
 
 async function initializeBrowser(useTor?: boolean): Promise<{ browser: Browser; page: Page }> {
-    let browser: Browser, page: Page;
+    const launchOptions: PuppeteerLaunchOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] };
     if (useTor) {
-        //await changeTorIp(); // Добавьте реализацию changeTorIp
-        browser = await puppeteer.launch({ args: ['--proxy-server=127.0.0.1:8118'], headless: true });
-    } else {
-        browser = await puppeteer.launch({ headless: false });
+        const isTorEnabled = await changeTorIp();
+        if (isTorEnabled) {
+            launchOptions.args?.push('--proxy-server=127.0.0.1:8118');
+            logInfo('Tor is enabled');
+        } else {
+            logError('Tor is not enabled, switching to normal mode');
+        }
     }
 
-    page = await browser.newPage();
+    const browser = await puppeteer.launch(launchOptions);
+    const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
     logInfo('Browser initialized.');
     return { browser, page };

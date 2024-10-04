@@ -31,8 +31,13 @@ function logInfo(message: string): void {
 }
 
 // Функция для логирования сообщений об ошибках
-function logError(message: string): void {
-    log(message, 'ERROR');
+function logError(message: string | Error): void {
+    if (message instanceof Error) {
+        log(message.stack || message.message, 'ERROR');
+        return;
+    } else {
+        log(message, 'ERROR');
+    }
 }
 
 export { logInfo, logError };
