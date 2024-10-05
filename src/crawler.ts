@@ -3,8 +3,7 @@ import { Browser, Page, PuppeteerLaunchOptions } from "puppeteer";
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-//import { extractData } from './extractor';
+import { extractData } from './extractor';
 import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
@@ -146,10 +145,10 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                     newLinks.forEach(link => frontier.addUrl(link));
                 }
 
-                // const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
-                // if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
-                //     await extractData(page, jsonFolderPath, htmlFolderPath, task, url);
-                // }
+                const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
+                if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
+                    await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url);
+                }
 
                 const actionsAfterExtraction = task.actions_after_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
                 if (actionsAfterExtraction && actionsAfterExtraction.length > 0) {

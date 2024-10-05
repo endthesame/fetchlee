@@ -5,6 +5,7 @@
     "@types/puppeteer": "^7.0.4",
     "@types/request": "^2.48.12",
     "commander": "^12.1.0",
+    "crypto-js": "^4.2.0",
     "puppeteer": "^23.5.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",

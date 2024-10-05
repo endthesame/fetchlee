@@ -11,28 +11,23 @@
         "to": [
           ".*document/[0-9]+/$"
         ]
-      },
-      {
-        "from": ".*academic.oup.com/ajhp$",
-        "to": [
-          ".*/ajhp/issue/.*"
-        ]
       }
     ],
     "metadata_extraction": [
-      {
-        "url_pattern": ".*academic.oup.com/journals",
-        "fields": {
-          "issn": "document.querySelector('.issn-field').innerText",
-          "journal_links": "Array.from(document.querySelectorAll('a.journal-link')).map(a =\u003E a.href)"
-        }
-      },
-      {
-        "url_pattern": ".*academic.*/journals_a_to_z",
-        "fields": {
-          "articles_links": "Array.from(document.querySelectorAll('a.article-link')).map(a =\u003E a.href)"
-        }
+    {
+      "url_pattern": ".*document/[0-9]+/$",
+      "fields": {
+        "title": { "selector": "meta[name='parsely-title']", "property": "content" },
+        "description": { "selector": "meta[property='twitter:description']", "property": "content" },
+        "author_empty": { "selector": "name='parsely-author'" }
       }
+    },
+    {
+      "url_pattern": ".*academic.*/journals_a_to_z",
+      "fields": {
+        "articles_links": { "selector": "a.article-link" }
+      }
+    }
     ],
     "actions_before_extraction": [
       {
