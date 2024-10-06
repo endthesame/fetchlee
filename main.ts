@@ -53,6 +53,7 @@ async function main() {
     program
         .command('crawl')
         .description('Run the crawler and optionally download PDFs')
+        .option('--headless', 'headless mode for browser')
         .option('-p, --download_pdf', 'download PDFs after crawling')
         .option('-a, --open_access', 'check open access before download')
         .option('-t, --use_tor', 'use Tor for crawling')
@@ -70,7 +71,8 @@ async function main() {
                 checkOpenAccess: options.open_access,
                 useTor: options.use_tor,
                 uploadViaSSH: options.upload_ssh,
-                crawlDelay: parseInt(options.delay)
+                crawlDelay: parseInt(options.delay),
+                headless: options.headless
             });
 
             // if (options.download_pdf) {

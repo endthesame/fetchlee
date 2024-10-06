@@ -25,6 +25,7 @@ interface CrawlOptions {
     useTor?: boolean;
     uploadViaSSH?: boolean;
     crawlDelay?: number;
+    headless?: boolean;
 }
 
 function initializeFrontier(seedFilePath: string): URLFrontier {
@@ -35,8 +36,9 @@ function initializeFrontier(seedFilePath: string): URLFrontier {
     return frontier;
 }
 
-async function initializeBrowser(useTor?: boolean): Promise<{ browser: Browser; page: Page }> {
-    const launchOptions: PuppeteerLaunchOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] };
+async function initializeBrowser(useTor?: boolean, headless?: boolean): Promise<{ browser: Browser; page: Page }> {
+    const launchOptions: PuppeteerLaunchOptions = { headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox'] };
+    if (headless) launchOptions.headless = headless;
     if (useTor) {
         const isTorEnabled = await changeTorIp();
         if (isTorEnabled) {
@@ -101,6 +103,7 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
     while (attempts < maxRetries) {
         try {
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+            // waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); понять как правильно использовать
             return true;
         } catch (error: any) {
             logError(`Error loading ${url}: ${error.message}. Retrying (${attempts + 1}/${maxRetries})...`);
@@ -113,7 +116,7 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay } = options;
+    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless } = options;
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     try {
@@ -121,7 +124,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
         const task = JSON.parse(taskData);
         const frontier = initializeFrontier(seedFilePath);
 
-        const browserPage = await initializeBrowser(useTor);
+        const browserPage = await initializeBrowser(useTor, headless);
         browser = browserPage.browser;
         page = browserPage.page;
 
