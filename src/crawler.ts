@@ -96,19 +96,20 @@ async function extractLinks(page: Page, rules: { to: string | string[] }[]): Pro
     return filteredLinks;
 }
 
-async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promise<void> {
+async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promise<Boolean> {
     let attempts = 0;
     while (attempts < maxRetries) {
         try {
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-            return;
+            return true;
         } catch (error: any) {
             logError(`Error loading ${url}: ${error.message}. Retrying (${attempts + 1}/${maxRetries})...`);
             attempts++;
             await delay(3000);
         }
     }
-    throw new Error(`Failed to navigate to ${url} after ${maxRetries} attempts`);
+    logError(`Failed to navigate to ${url} after ${maxRetries} attempts`);
+    return false;
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
@@ -130,7 +131,12 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                 if (!url) break;
 
                 frontier.markVisited(url);
-                await navigateWithRetry(page, url); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                logInfo(`Processing ${url}`);
+                const urlLoaded = await navigateWithRetry(page, url); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                if (!urlLoaded) {
+                    frontier.markFailed(url);
+                    continue;
+                }
                 
                 await delay(crawlDelay || 0); // Delay between requests
 
