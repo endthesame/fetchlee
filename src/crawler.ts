@@ -24,6 +24,7 @@ interface CrawlOptions {
     checkOpenAccess?: boolean;
     useTor?: boolean;
     uploadViaSSH?: boolean;
+    crawlDelay?: number;
 }
 
 function initializeFrontier(seedFilePath: string): URLFrontier {
@@ -111,7 +112,7 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH } = options;
+    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay } = options;
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     try {
@@ -129,7 +130,9 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                 if (!url) break;
 
                 frontier.markVisited(url);
-                await navigateWithRetry(page, url);
+                await navigateWithRetry(page, url); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                
+                await delay(crawlDelay || 0); // Delay between requests
 
                 const actionsBeforeExtraction = task.actions_before_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
                 if (actionsBeforeExtraction && actionsBeforeExtraction.length > 0) {
@@ -160,7 +163,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
 
                 logInfo(`Successfully processed ${url}`);
             } catch (error) {
-                const errorMessage = (error as any).stack || 'Unknown error';
+                const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
                 logError(`Error processing ${url || 'unknown URL'}: ${errorMessage}`);
             }
         }

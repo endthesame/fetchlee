@@ -56,7 +56,7 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
 
     // Сохранение метаданных в JSON-файл
     fs.writeFileSync(jsonFilePath, JSON.stringify(meta_data, null, 2));
-    logInfo(`Successful extraction from ${url}: ${jsonFileName}`);
+    logInfo(`Successful extraction from ${url}: ${jsonFilePath}`);
 
     // Сохранение HTML-страницы для дальнейшего анализа
     const htmlFilePath = path.join(htmlFolderPath, `${baseFileName}.html`);

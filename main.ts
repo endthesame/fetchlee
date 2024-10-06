@@ -53,10 +53,11 @@ async function main() {
     program
         .command('crawl')
         .description('Run the crawler and optionally download PDFs')
-        .option('-d, --download_pdf', 'download PDFs after crawling')
+        .option('-p, --download_pdf', 'download PDFs after crawling')
         .option('-a, --open_access', 'check open access before download')
         .option('-t, --use_tor', 'use Tor for crawling')
         .option('-s, --upload_ssh', 'upload source data via SSH')
+        .option('-d, --delay <number>', 'delay between requests', '0')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
@@ -68,7 +69,8 @@ async function main() {
                 downloadPDFmark: options.download_pdf,
                 checkOpenAccess: options.open_access,
                 useTor: options.use_tor,
-                uploadViaSSH: options.upload_ssh
+                uploadViaSSH: options.upload_ssh,
+                crawlDelay: parseInt(options.delay)
             });
 
             // if (options.download_pdf) {
