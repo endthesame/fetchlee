@@ -3,13 +3,13 @@
       {
         "from": ".*/browse/periodicals/title$",
         "to": [
-          ".*punumber=.*"
+          { "pattern": ".*" , "selector": ".browse-result .text-md-md-lh", "ignoreInnerLinks": true}
         ]
       },
       {
         "from": ".*punumber=.*",
         "to": [
-          ".*document/[0-9]+/$"
+          { "pattern": ".*document/[0-9]+/$"}
         ]
       }
     ],

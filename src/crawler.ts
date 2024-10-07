@@ -8,6 +8,7 @@ import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
+import { CrawlRule, MetadataExtractionRule} from './interfaces/task'
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -80,22 +81,47 @@ async function performActions(page: Page, actions: Action[]): Promise<void> {
     }
 }
 
-async function extractLinks(page: Page, rules: { to: string | string[] }[]): Promise<string[]> {
-    const links = await page.evaluate(() => {
-        return Array.from(document.links).map(link => link.href);
-    });
+async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
+    const allLinks: string[] = [];
 
-    const uniqueLinks = [...new Set(links)];
+    for (const rule of rules) {
+        for (const toRule of rule.to) {
+            let links: string[];
 
-    const filteredLinks = uniqueLinks.filter(link => {
-        return rules.some(rule => {
-            return Array.isArray(rule.to)
-                ? rule.to.some(pattern => new RegExp(pattern).test(link))
-                : new RegExp(rule.to).test(link);
-        });
-    });
+            // If a selector is provided in the "to" rule, extract links from that specific section
+            if (toRule.selector) {
+                links = await page.$$eval(toRule.selector, (elements: Element[], ignoreInnerLinks: boolean ) => {
+                    return elements.flatMap(element => {
+                        const linksInElement: string[] = [];
 
-    return filteredLinks;
+                        const elementHref = (element as HTMLAnchorElement).href; // Если сам элемент содержит href, добавляем его
+                        if (elementHref) {
+                            linksInElement.push(elementHref);
+                        }
+
+                        if (!ignoreInnerLinks) {
+                            const innerLinks = Array.from(element.querySelectorAll('a')).map(link => link.href);
+                            linksInElement.push(...innerLinks);
+                        }
+
+                        return linksInElement;
+                    });
+                }, toRule.ignoreInnerLinks || false);
+            } else {
+                // Otherwise, extract all links from the entire page
+                links = await page.$$eval('a', (links: HTMLAnchorElement[]) => links.map(link => link.href));
+            }
+
+            const uniqueLinks = [...new Set(links)];
+
+            // Filter links by the regex pattern specified in the "pattern" field
+            const filteredLinks = uniqueLinks.filter(link => new RegExp(toRule.pattern).test(link));
+
+            allLinks.push(...filteredLinks);
+        }
+    }
+
+    return allLinks;
 }
 
 async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promise<Boolean> {
@@ -103,10 +129,12 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
     while (attempts < maxRetries) {
         try {
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+            //await page.waitForNetworkIdle({ idleTime: 1000}); // set this only waitUntil: 'networkidle0'
             // waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); понять как правильно использовать
             return true;
         } catch (error: any) {
-            logError(`Error loading ${url}: ${error.message}. Retrying (${attempts + 1}/${maxRetries})...`);
+            const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
+            logError(`Error loading ${url}: ${errorMessage}. Retrying (${attempts + 1}/${maxRetries})...`);
             attempts++;
             await delay(3000);
         }
@@ -151,13 +179,13 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                     }
                 }
 
-                const matchingRules = task.crawl_rules?.filter((rule: any) => url && new RegExp(rule.from).test(url));
+                const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => url && new RegExp(rule.from).test(url));
                 if (matchingRules && matchingRules.length > 0) {
-                    const newLinks = await extractLinks(page, matchingRules);
+                    const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
                     newLinks.forEach(link => frontier.addUrl(link));
                 }
 
-                const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
+                const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url));
                 if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
                     await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url);
                 }

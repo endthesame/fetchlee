@@ -3,16 +3,17 @@ import path from 'path';
 import crypto from 'crypto';
 import { logInfo, logError } from './logger';
 import { Page } from 'puppeteer';
+import { MetadataExtractionRule, MetadataField} from './interfaces/task'
 
 // Универсальная функция для извлечения любых свойств элемента
-async function extractMetafields(page: Page, metaRule: any): Promise<Record<string, string | null>> {
+async function extractMetafields(page: Page, metaRule: MetadataExtractionRule): Promise<Record<string, string | null>> {
     if (!metaRule) return {};
 
     const fields: Record<string, string | null> = {};
     // TODO: 1) Если первый селектор не нашелся - ищем по второму; 2) Сделать метку чтобы можно было собирать все данные по 1 селектору и сделать разделитель для нее
     // Обход каждого поля и селектора для извлечения данных
     for (const [key, fieldRule] of Object.entries(metaRule.fields)) {
-        const { selector, property = 'textContent' } = fieldRule as { selector: string, property?: string };
+        const { selector, property = 'textContent' } = fieldRule as MetadataField;
 
         try {
             fields[key] = await page.$eval(selector, (el: Element, prop: string) => {
@@ -35,7 +36,7 @@ async function extractMetafields(page: Page, metaRule: any): Promise<Record<stri
 }
 
 // Функция для извлечения данных с каждой страницы
-export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: any[], url: string): Promise<void> {
+export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string): Promise<void> {
     // Используем первое совпадение с URL-паттерном для извлечения данных
     const task = matchingMetadataExtraction[0];
     const meta_data = await extractMetafields(page, task);
