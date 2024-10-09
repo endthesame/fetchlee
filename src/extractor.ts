@@ -10,30 +10,45 @@ async function extractMetafields(page: Page, metaRule: MetadataExtractionRule): 
     if (!metaRule) return {};
 
     const fields: Record<string, string | null> = {};
-    // TODO: 1) Если первый селектор не нашелся - ищем по второму; 2) Сделать метку чтобы можно было собирать все данные по 1 селектору и сделать разделитель для нее
-    // Обход каждого поля и селектора для извлечения данных
+
     for (const [key, fieldRule] of Object.entries(metaRule.fields)) {
-        const { selector, property = 'textContent' } = fieldRule as MetadataField;
+        const selectors = Array.isArray(fieldRule.selector) ? fieldRule.selector : [fieldRule.selector];
+        const { property = 'textContent', collectAll = false, delimiter = ' ' } = fieldRule;
+
+        let fieldValue = '';
 
         try {
-            fields[key] = await page.$eval(selector, (el: Element, prop: string) => {
-                // Сначала проверяем, если у элемента есть прямое свойство с указанным именем
-                if (prop in el) {
-                    // @ts-ignore для работы с динамическими свойствами
-                    return (el as any)[prop]?.trim() || "";
+            for (const selector of selectors) {
+                if (collectAll) {
+                    // Extract all matching elements' properties and join them with the delimiter
+                    fieldValue = await page.$$eval(selector, (elements: Element[], prop: string, delim: string) => {
+                        return elements
+                            .map(el => (prop in el ? (el as any)[prop]?.trim() : el.getAttribute(prop)) || "")
+                            .filter(Boolean)
+                            .join(delim);
+                    }, property, delimiter);
+
+                    if (fieldValue) break; // Stop if we found data for any selector
                 } else {
-                    // Если свойства нет, пробуем получить атрибут
-                    return el.getAttribute(prop) || "";
+                    // Extract the first matching element's property
+                    fieldValue = await page.$eval(selector, (el: Element, prop: string) => {
+                        return prop in el ? (el as any)[prop]?.trim() : el.getAttribute(prop) || "";
+                    }, property);
+                    
+                    if (fieldValue) break; // Stop if we found data for any selector
                 }
-            }, property);
+            }
         } catch (error) {
-            //logError(`Error extracting ${key}: ${error}`);
-            fields[key] = "";
+            // logError(`Error extracting ${key}: ${error}`);
+            fieldValue = "";
         }
+
+        fields[key] = fieldValue;
     }
 
     return fields;
 }
+
 
 // Функция для извлечения данных с каждой страницы
 export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string): Promise<void> {

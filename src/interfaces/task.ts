@@ -10,8 +10,10 @@ interface CrawlRule {
 }
 
 interface MetadataField {
-    selector: string;  // Селектор для извлечения
-    property?: string; // Опциональное свойство для указания атрибута или свойства откуда извлекать. По умолчанию textContent
+    selector: string | string[];  // Селектор или список селекторов для извлечения (список: используется первый найденный, который вернул не null и не "")
+    property?: string;            // Опциональное свойство для указания атрибута или свойства
+    collectAll?: boolean;         // Флаг для сбора всех данных по селектору
+    delimiter?: string;           // Разделитель для данных, если collectAll = true
 }
 
 interface MetadataExtractionRule {
