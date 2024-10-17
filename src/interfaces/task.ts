@@ -17,8 +17,9 @@ interface MetadataField {
 }
 
 interface MetadataExtractionRule {
-    url_pattern: string; // Паттерн URL для применения правила
-    fields: Record<string, MetadataField>; // Поля с соответствующими селекторами
+    url_pattern: string; // Pattern for matching URL
+    fields: Record<string, MetadataField>; // Fields with corresponding selectors
+    js_extraction_path?: string; // Optional path to a JS file for custom extraction logic
 }
 
 interface TaskConfig {

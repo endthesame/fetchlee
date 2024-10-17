@@ -1,20 +1,17 @@
 {
-    "crawl_rules": [
-      {
-        "from": ".*/books/edp-open-books",
-        "to": [
-          { "pattern": ".*" , "selector": ".news-container .items-row a", "ignoreInnerLinks": true}
-        ]
-      }
-    ],
-    "metadata_extraction": [
+  "crawl_rules": [
     {
-      "url_pattern": ".*books/edp-open-books/.*",
-      "fields": {
-        "title": { "selector": ".item-bk h1", "property": "innerText" },
-        "description": { "selector": "meta[property='twitter:description']", "property": "content" },
-        "author_empty": { "selector": "name='parsely-author'" }
-      }
+      "from": ".*/laboutique.edpsciences.fr/products",
+      "to": [
+        { "pattern": ".*" , "selector": ".container-product .p-i-t", "ignoreInnerLinks": false}
+      ]
     }
-  ]
+  ],
+  "metadata_extraction": [
+  {
+    "url_pattern": ".*/product/.*",
+    "fields": {},
+    "js_extraction_path": "/Users/eterentev/work/fetchlee/tasks/edp_books_extraction.js"
   }
+  ]
+}
