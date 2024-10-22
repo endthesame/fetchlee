@@ -2,13 +2,13 @@ import { PuppeteerExtra } from "puppeteer-extra";
 import { Browser, Page, PuppeteerLaunchOptions } from "puppeteer";
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
-import path from 'path';
 import { extractData } from './extractor';
 import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
 import { CrawlRule, MetadataExtractionRule} from './interfaces/task'
+import path from "path";
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -27,13 +27,21 @@ interface CrawlOptions {
     uploadViaSSH?: boolean;
     crawlDelay?: number;
     headless?: boolean;
+    frontierStatePath?: string;
+    frontierSaveStatePath?: string | null;
 }
 
-function initializeFrontier(seedFilePath: string): URLFrontier {
+function initializeFrontier(seedFilePath: string, frontierStatePath?: string): URLFrontier {
     const frontier = new URLFrontier();
-    const seeds = fs.readFileSync(seedFilePath, 'utf-8').split('\n').filter(url => url.trim() !== '');
-    seeds.forEach(seed => frontier.addUrl(seed.trim()));
-    logInfo(`Frontier initialized with ${seeds.length} seeds.`);
+
+    if (frontierStatePath && fs.existsSync(frontierStatePath)) {
+        frontier.loadState(frontierStatePath);
+    } else {
+        const seeds = fs.readFileSync(seedFilePath, 'utf-8').split('\n').filter(url => url.trim() !== '');
+        seeds.forEach(seed => frontier.addUrl(seed.trim()));
+        logInfo(`Frontier initialized with ${seeds.length} seeds.`);
+    }
+
     return frontier;
 }
 
@@ -130,7 +138,7 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
         try {
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
             //await page.waitForNetworkIdle({ idleTime: 1000}); // set this only waitUntil: 'networkidle0'
-            // waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); понять как правильно использовать
+            //await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); //понять как правильно использовать
             return true;
         } catch (error: any) {
             const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
@@ -144,13 +152,13 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless } = options;
+    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath } = options;
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     try {
         const taskData = fs.readFileSync(taskPath, 'utf-8');
         const task = JSON.parse(taskData);
-        const frontier = initializeFrontier(seedFilePath);
+        const frontier = initializeFrontier(seedFilePath, frontierStatePath);
 
         const browserPage = await initializeBrowser(useTor, headless);
         browser = browserPage.browser;
@@ -199,6 +207,12 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                 }
 
                 logInfo(`Successfully processed ${url}`);
+                // save state
+                if (frontierSaveStatePath) {
+                    const savePath = path.join(frontierSaveStatePath, 'frontier_state.json');
+                    frontier.saveState(savePath);
+                }
+
             } catch (error) {
                 const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
                 logError(`Error processing ${url || 'unknown URL'}: ${errorMessage}`);
