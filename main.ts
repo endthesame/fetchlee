@@ -65,7 +65,7 @@ async function main() {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
 
-            const frontierStatePath = options.frontier_state ? path.resolve(options.frontier_state) : undefined;
+            const frontierStatePath = options.frontier_load_state ? path.resolve(options.frontier_load_state) : undefined;
             const frontierSaveStatePath = options.frontier_save_state ? path.resolve(typeof options.frontier_save_state === 'string' ? options.frontier_save_state : siteFolderPath) : undefined;
 
             logInfo(`Crawling started. Collection name: ${globalOptions.coll_name}; Output folder: ${globalOptions.output}`);
