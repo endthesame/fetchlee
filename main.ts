@@ -11,6 +11,7 @@ interface SetupOptions {
     output: string;
     links?: string;
     task?: string;
+    useDatabase?: boolean;
 }
 
 async function setupDirectories(options: SetupOptions) {
@@ -59,6 +60,7 @@ async function main() {
         .option('-t, --use_tor', 'use Tor for crawling')
         .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
+        .option('--use_database', 'save metadata to database')
         .option('--frontier_load_state <path>', 'path to frontier state file')
         .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
         .action(async (options) => {
@@ -79,7 +81,9 @@ async function main() {
                 crawlDelay: parseInt(options.delay),
                 headless: options.headless,
                 frontierStatePath,
-                frontierSaveStatePath
+                frontierSaveStatePath,
+                useDatabase: options.use_database,
+                coll_name:globalOptions.coll_name
             });
 
             // if (options.download_pdf) {

@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { logInfo, logError } from './logger';
 import { MetadataExtractionRule, MetadataField } from './interfaces/task';
+import { DatabaseClient } from './database/database.interface';
 
 // Function to dynamically import and run custom JS extraction logic
 async function executeJsExtractor(page: Page, jsFilePath: string): Promise<Record<string, string | null>> {
@@ -66,7 +67,7 @@ async function extractMetafields(page: Page, metaRule: MetadataExtractionRule): 
 }
 
 // Function to extract data from each page
-export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string): Promise<void> {
+export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string, dbClient?: DatabaseClient): Promise<void> {
     const task = matchingMetadataExtraction[0];
 
     let meta_data: Record<string, string | null> = {};
@@ -99,6 +100,16 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
     // Save metadata to JSON file
     fs.writeFileSync(jsonFilePath, JSON.stringify(meta_data, null, 2));
     logInfo(`Successful extraction from ${url}: ${jsonFilePath}`);
+
+    if (dbClient) {
+        try {
+            meta_data["baseFileName"] = baseFileName;
+            await dbClient.saveMetadata(meta_data);
+            logInfo(`Metadata saved to database for ${url}`);
+        } catch (error) {
+            logError(`Failed to save metadata to database for ${url}: ${error}`);
+        }
+    }
 
     // Save the HTML page for further analysis
     const htmlFilePath = path.join(htmlFolderPath, `${baseFileName}.html`);

@@ -9,6 +9,9 @@ import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
 import { CrawlRule, MetadataExtractionRule} from './interfaces/task'
 import path from "path";
+import { DatabaseClient } from './database/database.interface';
+import { DatabaseFactory } from './database/database.factory';
+import { getDatabaseConfig } from './config/database.config';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -29,6 +32,8 @@ interface CrawlOptions {
     headless?: boolean;
     frontierStatePath?: string;
     frontierSaveStatePath?: string | null;
+    useDatabase?: boolean;
+    coll_name: string;
 }
 
 function initializeFrontier(seedFilePath: string, frontierStatePath?: string): URLFrontier {
@@ -152,10 +157,18 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath } = options;
+    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath, useDatabase, coll_name } = options;
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
+    let dbClient: DatabaseClient | undefined;
     try {
+        if (options.useDatabase) {
+            const dbConfig = getDatabaseConfig();
+            dbConfig.config.table = options.coll_name;
+            dbClient = DatabaseFactory.createClient(dbConfig.type, dbConfig.config);
+            await dbClient.connect();
+        }
+
         const taskData = fs.readFileSync(taskPath, 'utf-8');
         const task = JSON.parse(taskData);
         const frontier = initializeFrontier(seedFilePath, frontierStatePath);
@@ -195,7 +208,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
 
                 const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url));
                 if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
-                    await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url);
+                    await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url, dbClient);
                 }
 
                 const actionsAfterExtraction = task.actions_after_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
@@ -225,6 +238,9 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
         if (browser) {
             logInfo('Closing browser.');
             await browser.close();
+        }
+        if (dbClient) {
+            await dbClient.disconnect();
         }
     }
     logInfo('Crawling finished.');
