@@ -59,9 +59,14 @@ async function main() {
         .option('-t, --use_tor', 'use Tor for crawling')
         .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
+        .option('--frontier_load_state <path>', 'path to frontier state file')
+        .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
+
+            const frontierStatePath = options.frontier_load_state ? path.resolve(options.frontier_load_state) : undefined;
+            const frontierSaveStatePath = options.frontier_save_state ? path.resolve(typeof options.frontier_save_state === 'string' ? options.frontier_save_state : siteFolderPath) : undefined;
 
             logInfo(`Crawling started. Collection name: ${globalOptions.coll_name}; Output folder: ${globalOptions.output}`);
             logInfo("Directories are set up.");
@@ -72,7 +77,9 @@ async function main() {
                 useTor: options.use_tor,
                 uploadViaSSH: options.upload_ssh,
                 crawlDelay: parseInt(options.delay),
-                headless: options.headless
+                headless: options.headless,
+                frontierStatePath,
+                frontierSaveStatePath
             });
 
             // if (options.download_pdf) {
