@@ -14,7 +14,7 @@ export class PostgresClient implements DatabaseClient {
             password: config.password,
             database: config.database,
         });
-        this.defaultTable = config.table || 'crawled_metadata';
+        this.defaultTable = config.coll_name || config.table || 'crawled_metadata';
     }
 
     async connect(): Promise<void> {
@@ -57,8 +57,9 @@ export class PostgresClient implements DatabaseClient {
         logInfo('Disconnected from PostgreSQL database');
     }
 
-    async saveMetadata(metadata: Record<string, any>, options?: { table?: string }): Promise<void> {
+    async saveMetadata(metadata: Record<string, any>, options?: { table?: string, url?: string, baseFileName?: string }): Promise<void> {
         const tableName = options?.table || this.defaultTable;
+        const doc_url = options?.url || metadata['217'] || "undefinied"
         await this.ensureTable(tableName);
 
         const client = await this.pool.connect();
@@ -70,7 +71,7 @@ export class PostgresClient implements DatabaseClient {
                 ON CONFLICT (url) DO UPDATE
                 SET metadata = $2, updated_at = NOW()
             `;
-            await client.query(query, [metadata['217'], metadata]);
+            await client.query(query, [doc_url, metadata]);
             await client.query('COMMIT');
             logInfo(`Saved metadata to table ${tableName}`);
         } catch (error) {

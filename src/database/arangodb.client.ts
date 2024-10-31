@@ -12,7 +12,7 @@ export class ArangoClient implements DatabaseClient {
             auth: { username: config.username, password: config.password },
             databaseName: config.database,
         });
-        this.defaultCollection = config.collection || 'crawled_data';
+        this.defaultCollection = config.coll_name || config.collection || 'crawled_data';
     }
 
     async connect(): Promise<void> {
@@ -37,15 +37,17 @@ export class ArangoClient implements DatabaseClient {
         logInfo('Disconnected from ArangoDB database');
     }
 
-    async saveMetadata(metadata: Record<string, any>, options?: { table?: string }): Promise<void> {
+    async saveMetadata(metadata: Record<string, any>, options?: { table?: string, url?: string, baseFileName?: string }): Promise<void> {
         const collectionName = options?.table || this.defaultCollection;
         await this.ensureCollection(collectionName);
 
         try {
             await this.db.collection(collectionName).save(
                 {
-                    _key: metadata['217'].replace(/[^a-zA-Z0-9]/g, '_'),
-                    url: metadata['217'],
+                    //_key: metadata['217'].replace(/[^a-zA-Z0-9]/g, '_'),
+                    _key: options?.baseFileName,
+                    url: options?.url,
+                    base_file_name: options?.baseFileName,
                     metadata,
                     created_at: new Date(),
                 },

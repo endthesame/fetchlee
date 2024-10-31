@@ -103,8 +103,7 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
 
     if (dbClient) {
         try {
-            meta_data["baseFileName"] = baseFileName;
-            await dbClient.saveMetadata(meta_data);
+            await dbClient.saveMetadata(meta_data, {url: url, baseFileName: baseFileName});
             logInfo(`Metadata saved to database for ${url}`);
         } catch (error) {
             logError(`Failed to save metadata to database for ${url}: ${error}`);

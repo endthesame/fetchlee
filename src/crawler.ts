@@ -164,7 +164,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
     try {
         if (options.useDatabase) {
             const dbConfig = getDatabaseConfig();
-            dbConfig.config.table = options.coll_name;
+            dbConfig.config.coll_name = options.coll_name;
             dbClient = DatabaseFactory.createClient(dbConfig.type, dbConfig.config);
             await dbClient.connect();
         }

@@ -7,5 +7,5 @@ export interface DatabaseConfig {
 export interface DatabaseClient {
     connect(): Promise<void>;
     disconnect(): Promise<void>;
-    saveMetadata(metadata: Record<string, any>, options?: { table?: string }): Promise<void>;
+    saveMetadata(metadata: Record<string, any>, options?: { table?: string, url?: string, baseFileName?: string }): Promise<void>;
 }
