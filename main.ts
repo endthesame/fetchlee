@@ -63,6 +63,7 @@ async function main() {
         .option('--use_database', 'save metadata to database')
         .option('--frontier_load_state <path>', 'path to frontier state file')
         .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
+        .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
@@ -83,7 +84,8 @@ async function main() {
                 frontierStatePath,
                 frontierSaveStatePath,
                 useDatabase: options.use_database,
-                coll_name:globalOptions.coll_name
+                coll_name:globalOptions.coll_name,
+                handleCloudflare: options.handle_cloudflare
             });
 
             // if (options.download_pdf) {

@@ -12,6 +12,7 @@ import path from "path";
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
 import { getDatabaseConfig } from './config/database.config';
+import { CloudflareHandler } from './utils/cloudflare-handler';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -34,6 +35,7 @@ interface CrawlOptions {
     frontierSaveStatePath?: string | null;
     useDatabase?: boolean;
     coll_name: string;
+    handleCloudflare?: boolean;
 }
 
 function initializeFrontier(seedFilePath: string, frontierStatePath?: string): URLFrontier {
@@ -137,13 +139,23 @@ async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
     return allLinks;
 }
 
-async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promise<Boolean> {
+async function navigateWithRetry(page: Page, url: string, handleCloudflare: boolean = false, maxRetries = 3): Promise<Boolean> {
     let attempts = 0;
+    const cloudflareHandler = handleCloudflare ? new CloudflareHandler(page) : null;
+
     while (attempts < maxRetries) {
         try {
             await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
             //await page.waitForNetworkIdle({ idleTime: 1000}); // set this only waitUntil: 'networkidle0'
             //await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); //понять как правильно использовать
+
+            if (cloudflareHandler) {
+                const result = await cloudflareHandler.handleNavigation(url);
+                if (!result) {
+                    throw new Error('Failed to handle Cloudflare challenge');
+                }
+            }
+
             return true;
         } catch (error: any) {
             const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
@@ -157,7 +169,7 @@ async function navigateWithRetry(page: Page, url: string, maxRetries = 3): Promi
 }
 
 export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath, useDatabase, coll_name } = options;
+    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath, useDatabase, coll_name, handleCloudflare } = options;
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     let dbClient: DatabaseClient | undefined;
@@ -184,7 +196,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
 
                 frontier.markVisited(url);
                 logInfo(`Processing ${url}`);
-                const urlLoaded = await navigateWithRetry(page, url); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                const urlLoaded = await navigateWithRetry(page, url, handleCloudflare); // TODO: возможность в задании опционально указывать waitUntil и timeout
                 if (!urlLoaded) {
                     frontier.markFailed(url);
                     continue;
