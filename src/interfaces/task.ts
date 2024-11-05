@@ -6,7 +6,14 @@ interface LinkRuleTo {
 
 interface CrawlRule {
     from: string;
-    to: LinkRuleTo[];
+    to?: LinkRuleTo[];
+    waitFor?: WaitForOptions; // используется для загрузки и ожидания страницы из from
+}
+
+interface WaitForOptions {
+    selector?: string; // селектор для ожидания, если есть
+    timeout?: number;  // таймаут для ожидания
+    load?: "networkidle0" | "networkidle2" | "domcontentloaded"; // опционально: тип загрузки
 }
 
 interface MetadataField {
@@ -33,4 +40,5 @@ export {
     MetadataField,
     MetadataExtractionRule,
     TaskConfig,
+    WaitForOptions
 }

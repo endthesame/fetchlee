@@ -7,7 +7,7 @@ import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
-import { CrawlRule, MetadataExtractionRule} from './interfaces/task'
+import { CrawlRule, MetadataExtractionRule, WaitForOptions} from './interfaces/task'
 import path from "path";
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
@@ -100,7 +100,7 @@ async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
     const allLinks: string[] = [];
 
     for (const rule of rules) {
-        for (const toRule of rule.to) {
+        if (rule.to) for (const toRule of rule.to) {
             let links: string[];
 
             // If a selector is provided in the "to" rule, extract links from that specific section
@@ -139,21 +139,29 @@ async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
     return allLinks;
 }
 
-async function navigateWithRetry(page: Page, url: string, handleCloudflare: boolean = false, maxRetries = 3): Promise<Boolean> {
+async function navigateWithRetry(page: Page, url: string, waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }, handleCloudflare: boolean = false, maxRetries = 3): Promise<Boolean> {
     let attempts = 0;
     const cloudflareHandler = handleCloudflare ? new CloudflareHandler(page) : null;
 
+    const navigationOptions = { 
+        waitUntil: waitForOptions.load || "networkidle2", 
+        timeout: waitForOptions.timeout || 60000 
+    };
+
     while (attempts < maxRetries) {
         try {
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-            //await page.waitForNetworkIdle({ idleTime: 1000}); // set this only waitUntil: 'networkidle0'
-            //await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }); //понять как правильно использовать
+            
+            await page.goto(url, navigationOptions);
 
             if (cloudflareHandler) {
                 const result = await cloudflareHandler.handleNavigation(url);
                 if (!result) {
                     throw new Error('Failed to handle Cloudflare challenge');
                 }
+            }
+
+            if (waitForOptions.selector) {
+                await page.waitForSelector(waitForOptions.selector, { timeout: waitForOptions.timeout });
             }
 
             return true;
@@ -194,9 +202,16 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                 url = frontier.getNextUrl();
                 if (!url) break;
 
+                const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => url && new RegExp(rule.from).test(url));
+                let waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }; // дефолтные waitForOptions
+                // Если найдено соответствующее правило, используем его waitFor настройки
+                if (matchingRules && matchingRules.length > 0) {
+                    waitForOptions = matchingRules[0].waitFor || waitForOptions; // Применяем waitFor из первого совпадения или дефолт
+                }
+
                 frontier.markVisited(url);
                 logInfo(`Processing ${url}`);
-                const urlLoaded = await navigateWithRetry(page, url, handleCloudflare); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, handleCloudflare); // TODO: возможность в задании опционально указывать waitUntil и timeout
                 if (!urlLoaded) {
                     frontier.markFailed(url);
                     continue;
@@ -212,7 +227,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                     }
                 }
 
-                const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => url && new RegExp(rule.from).test(url));
+                // извлечение ссылок
                 if (matchingRules && matchingRules.length > 0) {
                     const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
                     newLinks.forEach(link => frontier.addUrl(link));
