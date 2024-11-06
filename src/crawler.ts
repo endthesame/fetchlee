@@ -231,6 +231,7 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
                 if (matchingRules && matchingRules.length > 0) {
                     const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
                     newLinks.forEach(link => frontier.addUrl(link));
+                    logInfo(`Extracted ${newLinks.length} links from ${url}`);
                 }
 
                 const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url));
