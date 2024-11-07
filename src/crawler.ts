@@ -241,7 +241,7 @@ export async function crawl(
                 const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare);
                 if (!urlLoaded) {
                     frontier.markFailed(url);
-                    continue; // add saveFrontier and other stuff that needed even page not loaded
+                    continue; // TODO: add saveFrontier and other stuff that needed even page not loaded
                 }
 
                 await mouseSimulator?.stopMouseMovement();
@@ -256,7 +256,7 @@ export async function crawl(
                     }
                 }
 
-                // извлечение ссылок
+                // Links extraction
                 if (matchingRules && matchingRules.length > 0) {
                     const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
                     newLinks.forEach(link => frontier.addUrl(link));
@@ -284,6 +284,7 @@ export async function crawl(
                 }
 
             } catch (error) {
+                await mouseSimulator?.stopMouseMovement();
                 const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
                 logError(`Error processing ${url || 'unknown URL'}: ${errorMessage}`);
             }
