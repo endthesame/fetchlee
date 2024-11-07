@@ -1,4 +1,3 @@
-import { console } from 'inspector';
 import { logInfo, logError } from './logger';
 import fs from 'fs';
 

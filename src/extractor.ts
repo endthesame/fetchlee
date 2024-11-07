@@ -71,7 +71,15 @@ async function extractMetafields(page: Page, metaRule: MetadataExtractionRule): 
 }
 
 // Function to extract data from each page
-export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string, dbClient?: DatabaseClient): Promise<void> {
+export async function extractData(
+    page: Page, 
+    jsonFolderPath: string, 
+    htmlFolderPath: string, 
+    matchingMetadataExtraction: MetadataExtractionRule[], 
+    url: string, 
+    dbClient?: DatabaseClient
+): Promise<void> {
+    
     const task = matchingMetadataExtraction[0];
 
     let meta_data: Record<string, string | null> = {};
