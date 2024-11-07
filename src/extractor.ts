@@ -5,11 +5,15 @@ import crypto from 'crypto';
 import { logInfo, logError } from './logger';
 import { MetadataExtractionRule, MetadataField } from './interfaces/task';
 import { DatabaseClient } from './database/database.interface';
+import { pathToFileURL } from 'url';
 
 // Function to dynamically import and run custom JS extraction logic
 async function executeJsExtractor(page: Page, jsFilePath: string): Promise<Record<string, string | null>> {
     try {
-        const jsModule = await import(jsFilePath);
+        // Преобразование пути в формат file://
+        const jsFileUrl = pathToFileURL(jsFilePath).href;
+        const jsModule = await import(jsFileUrl);
+        
         if (typeof jsModule.extractMetadata !== 'function') {
             throw new Error(`No extractMetadata function found in ${jsFilePath}`);
         }

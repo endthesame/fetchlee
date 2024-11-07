@@ -20,7 +20,8 @@ export class CloudflareHandler {
         const cfRayId = document.querySelector('[data-ray]');
         const cfTitle = document.title.toLowerCase().includes('cloudflare') || document.title.includes('Just a moment...');
         const turnstileFrame = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
-        return !!(cfChallenge || cfRayId || cfTitle || turnstileFrame);
+        const invisibleRecaptcha = document.querySelector('iframe[src*="recaptcha/api.js"]');
+        return !!(cfChallenge || cfRayId || cfTitle || turnstileFrame || invisibleRecaptcha);
       });
     } catch (error) {
       const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
@@ -35,7 +36,7 @@ export class CloudflareHandler {
     while (attempts < this.maxAttempts) {
       try {
         logInfo('Attempting to solve Cloudflare challenge...');
-        
+
         // Ждем загрузки страницы с проверкой
         await delay(2000);
 
@@ -43,10 +44,12 @@ export class CloudflareHandler {
         const challengeExists = await this.page.evaluate(() => {
           const selectors = [
             '#challenge-stage',
+            'input[type="checkbox"]',
             '[type="submit"]',
             '.ray-id button',
             '.challenge-button',
-            'iframe[src*="challenges.cloudflare.com"]'
+            'iframe[src*="challenges.cloudflare.com"]',
+            'iframe[src*="recaptcha/api.js"]'
           ];
           return selectors.some(selector => document.querySelector(selector));
         });
@@ -58,7 +61,7 @@ export class CloudflareHandler {
 
         // Пытаемся найти и кликнуть по кнопке или выполнить действие
         await this.page.evaluate(() => {
-          const button = document.querySelector('[type="submit"], .ray-id button, .challenge-button') as HTMLElement;
+          const button = document.querySelector('[type="submit"], .ray-id button, .challenge-button, input[type="checkbox"]') as HTMLElement;
           if (button) button.click();
         });
 
@@ -68,7 +71,8 @@ export class CloudflareHandler {
             const elements = [
               '#challenge-stage',
               '[data-ray]',
-              'iframe[src*="challenges.cloudflare.com"]'
+              'iframe[src*="challenges.cloudflare.com"]',
+              'iframe[src*="recaptcha/api.js"]'
             ];
             return !elements.some(selector => document.querySelector(selector));
           },
