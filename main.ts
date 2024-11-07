@@ -64,6 +64,7 @@ async function main() {
         .option('--frontier_load_state <path>', 'path to frontier state file')
         .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
         .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
+        .option('--simulate_mouse', 'enable mouse simulating')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
@@ -81,11 +82,12 @@ async function main() {
                 uploadViaSSH: options.upload_ssh,
                 crawlDelay: parseInt(options.delay),
                 headless: options.headless,
-                frontierStatePath,
-                frontierSaveStatePath,
+                frontierStatePath: frontierStatePath,
+                frontierSaveStatePath: frontierSaveStatePath,
                 useDatabase: options.use_database,
-                coll_name:globalOptions.coll_name,
-                handleCloudflare: options.handle_cloudflare
+                collName:globalOptions.coll_name,
+                handleCloudflare: options.handle_cloudflare,
+                simulateMouse: options.simulate_mouse
             });
 
             // if (options.download_pdf) {

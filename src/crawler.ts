@@ -13,9 +13,15 @@ import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
 import { getDatabaseConfig } from './config/database.config';
 import { CloudflareHandler } from './utils/cloudflare-handler';
+import { MouseSimulator } from './utils/mouse-simulator';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
+
+interface ViewportSettings {
+    width: number;
+    height: number;
+}
 
 interface Action {
     action: string;
@@ -34,8 +40,9 @@ interface CrawlOptions {
     frontierStatePath?: string;
     frontierSaveStatePath?: string | null;
     useDatabase?: boolean;
-    coll_name: string;
+    collName: string;
     handleCloudflare?: boolean;
+    simulateMouse?: boolean;
 }
 
 function initializeFrontier(seedFilePath: string, frontierStatePath?: string): URLFrontier {
@@ -52,7 +59,7 @@ function initializeFrontier(seedFilePath: string, frontierStatePath?: string): U
     return frontier;
 }
 
-async function initializeBrowser(useTor?: boolean, headless?: boolean): Promise<{ browser: Browser; page: Page }> {
+async function initializeBrowser(useTor?: boolean, headless?: boolean, viewportOptions: ViewportSettings = {width: 1280, height: 720}): Promise<{ browser: Browser; page: Page }> {
     const launchOptions: PuppeteerLaunchOptions = { headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox'] };
     if (headless) launchOptions.headless = headless;
     if (useTor) {
@@ -67,7 +74,7 @@ async function initializeBrowser(useTor?: boolean, headless?: boolean): Promise<
 
     const browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720 });
+    await page.setViewport(viewportOptions);
     logInfo('Browser initialized.');
     return { browser, page };
 }
@@ -139,10 +146,15 @@ async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
     return allLinks;
 }
 
-async function navigateWithRetry(page: Page, url: string, waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }, handleCloudflare: boolean = false, maxRetries = 3): Promise<Boolean> {
+async function navigateWithRetry(
+    page: Page, 
+    url: string, 
+    waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }, 
+    handleCloudflare: boolean = false, 
+    maxRetries: number = 3
+): Promise<Boolean> {
     let attempts = 0;
     const cloudflareHandler = handleCloudflare ? new CloudflareHandler(page) : null;
-
     const navigationOptions = { 
         waitUntil: waitForOptions.load || "networkidle2", 
         timeout: waitForOptions.timeout || 60000 
@@ -176,31 +188,46 @@ async function navigateWithRetry(page: Page, url: string, waitForOptions: WaitFo
     return false;
 }
 
-export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlFolderPath: string, siteFolderPath: string,seedFilePath: string,options: CrawlOptions): Promise<void> {
-    const { taskPath, downloadPDFmark, checkOpenAccess, useTor, uploadViaSSH, crawlDelay, headless, frontierStatePath, frontierSaveStatePath, useDatabase, coll_name, handleCloudflare } = options;
+export async function crawl(
+    jsonFolderPath: string, 
+    pdfFolderPath: string, 
+    htmlFolderPath: string, 
+    siteFolderPath: string, 
+    seedFilePath: string, 
+    options: CrawlOptions
+): Promise<void> {
 
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     let dbClient: DatabaseClient | undefined;
+    let mouseSimulator: MouseSimulator | undefined;
     try {
         if (options.useDatabase) {
             const dbConfig = getDatabaseConfig();
-            dbConfig.config.coll_name = options.coll_name;
+            dbConfig.config.coll_name = options.collName;
             dbClient = DatabaseFactory.createClient(dbConfig.type, dbConfig.config);
             await dbClient.connect();
         }
 
-        const taskData = fs.readFileSync(taskPath, 'utf-8');
+        const taskData = fs.readFileSync(options.taskPath, 'utf-8');
         const task = JSON.parse(taskData);
-        const frontier = initializeFrontier(seedFilePath, frontierStatePath);
+        const frontier = initializeFrontier(seedFilePath, options.frontierStatePath);
 
-        const browserPage = await initializeBrowser(useTor, headless);
+        const viewportOptions = { width: 1280, height: 720 }
+        const browserPage = await initializeBrowser(options.useTor, options.headless, viewportOptions);
         browser = browserPage.browser;
         page = browserPage.page;
+
+        // Start simulating mouse movement
+        if (options.simulateMouse) {
+            mouseSimulator = new MouseSimulator(page);
+        }
 
         while (frontier.hasMoreUrls()) {
             try {
                 url = frontier.getNextUrl();
                 if (!url) break;
+
+                mouseSimulator?.simulateMouseMovement(0, viewportOptions.width, 0, viewportOptions.height, 50, 500);
 
                 const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => url && new RegExp(rule.from).test(url));
                 let waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }; // дефолтные waitForOptions
@@ -211,13 +238,15 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
 
                 frontier.markVisited(url);
                 logInfo(`Processing ${url}`);
-                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, handleCloudflare); // TODO: возможность в задании опционально указывать waitUntil и timeout
+                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare);
                 if (!urlLoaded) {
                     frontier.markFailed(url);
-                    continue;
+                    continue; // add saveFrontier and other stuff that needed even page not loaded
                 }
+
+                await mouseSimulator?.stopMouseMovement();
                 
-                await delay(crawlDelay || 0); // Delay between requests
+                await delay(options.crawlDelay || 0); // Delay between requests
 
                 const actionsBeforeExtraction = task.actions_before_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
                 if (actionsBeforeExtraction && actionsBeforeExtraction.length > 0) {
@@ -249,8 +278,8 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
 
                 logInfo(`Successfully processed ${url}`);
                 // save state
-                if (frontierSaveStatePath) {
-                    const savePath = path.join(frontierSaveStatePath, 'frontier_state.json');
+                if (options.frontierSaveStatePath) {
+                    const savePath = path.join(options.frontierSaveStatePath, 'frontier_state.json');
                     frontier.saveState(savePath);
                 }
 
@@ -263,13 +292,14 @@ export async function crawl(jsonFolderPath: string, pdfFolderPath: string, htmlF
         const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
         logError(`Critical error: ${errorMessage}`);
     } finally {
+        await mouseSimulator?.stopMouseMovement();
+
         if (browser) {
             logInfo('Closing browser.');
             await browser.close();
         }
-        if (dbClient) {
-            await dbClient.disconnect();
-        }
+
+        await dbClient?.disconnect();
     }
     logInfo('Crawling finished.');
 }
