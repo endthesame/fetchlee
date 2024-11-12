@@ -1,7 +1,10 @@
 module.exports = {
-    extractMetadata: function () {
+    extractMetadata: function (params) {
     // Ваш код для извлечения метаданных здесь
     // Верните результат в виде объекта
+
+        const { url } = params;
+        
         const getMetaAttribute = (selector, attribute, childSelector) => {
             const element = document.querySelector(selector);
             if (element) {
@@ -78,11 +81,12 @@ module.exports = {
             return result.toString();
         }
 
-        let title = getMetaAttribute(['meta[name="citation_title"]'], 'content')
+        let title = getMetaAttribute(['head title'])
         let authors = getMetaAttributes(['meta[name="citation_author"]'], 'content')
         let doi = getMetaAttribute(['meta[name="citation_doi"]'], 'content')
+        let currUrl = url || "";
         
-        var metadata = { '202': title, '200': authors, '233':doi};
+        var metadata = { '202': title, '200': authors, '233':doi, 'url': currUrl};
 
         return metadata;
     }

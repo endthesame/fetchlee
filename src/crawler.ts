@@ -45,14 +45,14 @@ interface CrawlOptions {
     simulateMouse?: boolean;
 }
 
-function initializeFrontier(seedFilePath: string, frontierStatePath?: string): URLFrontier {
-    const frontier = new URLFrontier();
+function initializeFrontier(seedFilePath: string, frontierStatePath?: string, frontierSaveStatePath?: string | null): URLFrontier {
+    const frontier = new URLFrontier({frontierSaveStatePath});
 
     if (frontierStatePath && fs.existsSync(frontierStatePath)) {
         frontier.loadState(frontierStatePath);
     } else {
         const seeds = fs.readFileSync(seedFilePath, 'utf-8').split('\n').filter(url => url.trim() !== '');
-        seeds.forEach(seed => frontier.addUrl(seed.trim()));
+        frontier.addUrls(seeds);
         logInfo(`Frontier initialized with ${seeds.length} seeds.`);
     }
 
@@ -200,6 +200,8 @@ export async function crawl(
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     let dbClient: DatabaseClient | undefined;
     let mouseSimulator: MouseSimulator | undefined;
+    let frontier: URLFrontier | undefined;
+
     try {
         if (options.useDatabase) {
             const dbConfig = getDatabaseConfig();
@@ -210,7 +212,7 @@ export async function crawl(
 
         const taskData = fs.readFileSync(options.taskPath, 'utf-8');
         const task = JSON.parse(taskData);
-        const frontier = initializeFrontier(seedFilePath, options.frontierStatePath);
+        frontier = initializeFrontier(seedFilePath, options.frontierStatePath, options.frontierSaveStatePath);
 
         const viewportOptions = { width: 1280, height: 720 }
         const browserPage = await initializeBrowser(options.useTor, options.headless, viewportOptions);
@@ -224,7 +226,7 @@ export async function crawl(
 
         while (frontier.hasMoreUrls()) {
             try {
-                url = frontier.getNextUrl();
+                url = await frontier.getNextUrl();
                 if (!url) break;
 
                 mouseSimulator?.simulateMouseMovement(0, viewportOptions.width, 0, viewportOptions.height, 50, 500);
@@ -236,13 +238,14 @@ export async function crawl(
                     waitForOptions = matchingRules[0].waitFor || waitForOptions; // Применяем waitFor из первого совпадения или дефолт
                 }
 
-                frontier.markVisited(url);
                 logInfo(`Processing ${url}`);
                 const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare);
                 if (!urlLoaded) {
                     frontier.markFailed(url);
-                    continue; // TODO: add saveFrontier and other stuff that needed even page not loaded
+                    continue;
                 }
+
+                await frontier.markVisited(url);
 
                 await mouseSimulator?.stopMouseMovement();
                 
@@ -259,7 +262,7 @@ export async function crawl(
                 // Links extraction
                 if (matchingRules && matchingRules.length > 0) {
                     const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
-                    newLinks.forEach(link => frontier.addUrl(link));
+                    await frontier?.addUrls(newLinks);
                     logInfo(`Extracted ${newLinks.length} links from ${url}`);
                 }
 
@@ -277,11 +280,6 @@ export async function crawl(
                 }
 
                 logInfo(`Successfully processed ${url}`);
-                // save state
-                if (options.frontierSaveStatePath) {
-                    const savePath = path.join(options.frontierSaveStatePath, 'frontier_state.json');
-                    frontier.saveState(savePath);
-                }
 
             } catch (error) {
                 await mouseSimulator?.stopMouseMovement();

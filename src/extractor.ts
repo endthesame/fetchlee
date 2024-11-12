@@ -8,7 +8,7 @@ import { DatabaseClient } from './database/database.interface';
 import { pathToFileURL } from 'url';
 
 // Function to dynamically import and run custom JS extraction logic
-async function executeJsExtractor(page: Page, jsFilePath: string): Promise<Record<string, string | null>> {
+async function executeJsExtractor(page: Page, jsFilePath: string, url: string): Promise<Record<string, string | null>> {
     try {
         // Преобразование пути в формат file://
         const jsFileUrl = pathToFileURL(jsFilePath).href;
@@ -18,7 +18,7 @@ async function executeJsExtractor(page: Page, jsFilePath: string): Promise<Recor
             throw new Error(`No extractMetadata function found in ${jsFilePath}`);
         }
         // Call the `extractMetadata` function from the JS module
-        return await page.evaluate(jsModule.extractMetadata);
+        return await page.evaluate(jsModule.extractMetadata, { url });
     } catch (error) {
         const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
         logError(`Error executing JS extraction file: ${errorMessage}`);
@@ -88,7 +88,7 @@ export async function extractData(
     if (task.js_extraction_path) {
         const jsFilePath = path.resolve(__dirname, task.js_extraction_path);
         logInfo(`Using custom JS extraction from ${jsFilePath}`);
-        meta_data = await executeJsExtractor(page, jsFilePath);
+        meta_data = await executeJsExtractor(page, jsFilePath, url);
     } else {
         // Otherwise, use the standard selector-based extraction
         logInfo(`Using selector-based extraction for ${url}`);
@@ -99,9 +99,6 @@ export async function extractData(
         logInfo(`Skipping extraction from ${url} - due to lack of metadata.`);
         return;
     }
-
-    // Add URL to metadata
-    meta_data["217"] = url; //Подумать что делать с url
 
     // Generate a unique filename based on the URL
     const encodedUrl = encodeURIComponent(url);
