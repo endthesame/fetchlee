@@ -7,7 +7,7 @@ import URLFrontier from './frontier';
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
-import { CrawlRule, MetadataExtractionRule, WaitForOptions} from './interfaces/task'
+import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule} from './interfaces/task'
 import path from "path";
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
@@ -103,7 +103,27 @@ async function performActions(page: Page, actions: Action[]): Promise<void> {
     }
 }
 
-async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
+function transformUrl(url: string, transformations: LinkTransformationRule[]): string {
+    if (!url) return url;
+    
+    // Применяем все подходящие трансформации
+    for (const transform of transformations) {
+        const regex = new RegExp(transform.pattern);
+        if (regex.test(url)) {
+            
+            if (transform.baseUrl) {
+                url = `${transform.baseUrl.replace(/\/$/, '')}${url}`;
+            }
+            
+            url = url.replace(regex, transform.transform);
+            break;
+        }
+    }
+
+    return url;
+}
+
+async function extractLinks(page: Page, rules: CrawlRule[], transformations: LinkTransformationRule[]): Promise<string[]> {
     const allLinks: string[] = [];
 
     for (const rule of rules) {
@@ -136,8 +156,15 @@ async function extractLinks(page: Page, rules: CrawlRule[]): Promise<string[]> {
 
             const uniqueLinks = [...new Set(links)];
 
+            const transformedLinks = uniqueLinks.map(link => {
+                if (transformations) {
+                    return transformUrl(link, transformations);
+                }
+                return link;
+            });
+
             // Filter links by the regex pattern specified in the "pattern" field
-            const filteredLinks = uniqueLinks.filter(link => new RegExp(toRule.pattern).test(link));
+            const filteredLinks = transformedLinks.filter(link => new RegExp(toRule.pattern).test(link));
 
             allLinks.push(...filteredLinks);
         }
@@ -261,7 +288,7 @@ export async function crawl(
 
                 // Links extraction
                 if (matchingRules && matchingRules.length > 0) {
-                    const newLinks = await extractLinks(page, matchingRules); // TODO: собирать ссылки из определенных селекторов
+                    const newLinks = await extractLinks(page, matchingRules, task.links_transformation); // TODO: собирать ссылки из определенных селекторов
                     await frontier?.addUrls(newLinks);
                     logInfo(`Extracted ${newLinks.length} links from ${url}`);
                 }

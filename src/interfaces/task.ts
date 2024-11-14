@@ -29,9 +29,16 @@ interface MetadataExtractionRule {
     js_extraction_path?: string; // Optional path to a JS file for custom extraction logic
 }
 
+interface LinkTransformationRule {
+    pattern: string;      // Паттерн для поиска ссылок, которые нужно преобразовать
+    transform: string;    // Шаблон для преобразования. Может содержать $1, $2 и т.д. для групп
+    baseUrl?: string;     // Опциональный базовый URL для относительных ссылок
+}
+
 interface TaskConfig {
     crawl_rules: CrawlRule[];
     metadata_extraction: MetadataExtractionRule[]; // Массив правил извлечения метаданных
+    links_transformation?: LinkTransformationRule[];
 }
 
 export {
@@ -40,5 +47,6 @@ export {
     MetadataField,
     MetadataExtractionRule,
     TaskConfig,
-    WaitForOptions
+    WaitForOptions,
+    LinkTransformationRule
 }
