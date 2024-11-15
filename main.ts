@@ -11,6 +11,7 @@ interface SetupOptions {
     output: string;
     links?: string;
     task?: string;
+    useDatabase?: boolean;
 }
 
 async function setupDirectories(options: SetupOptions) {
@@ -59,8 +60,11 @@ async function main() {
         .option('-t, --use_tor', 'use Tor for crawling')
         .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
+        .option('--use_database', 'save metadata to database')
         .option('--frontier_load_state <path>', 'path to frontier state file')
         .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
+        .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
+        .option('--simulate_mouse', 'enable mouse simulating')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
@@ -78,8 +82,12 @@ async function main() {
                 uploadViaSSH: options.upload_ssh,
                 crawlDelay: parseInt(options.delay),
                 headless: options.headless,
-                frontierStatePath,
-                frontierSaveStatePath
+                frontierStatePath: frontierStatePath,
+                frontierSaveStatePath: frontierSaveStatePath,
+                useDatabase: options.use_database,
+                collName:globalOptions.coll_name,
+                handleCloudflare: options.handle_cloudflare,
+                simulateMouse: options.simulate_mouse
             });
 
             // if (options.download_pdf) {

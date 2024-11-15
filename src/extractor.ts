@@ -4,16 +4,21 @@ import path from 'path';
 import crypto from 'crypto';
 import { logInfo, logError } from './logger';
 import { MetadataExtractionRule, MetadataField } from './interfaces/task';
+import { DatabaseClient } from './database/database.interface';
+import { pathToFileURL } from 'url';
 
 // Function to dynamically import and run custom JS extraction logic
-async function executeJsExtractor(page: Page, jsFilePath: string): Promise<Record<string, string | null>> {
+async function executeJsExtractor(page: Page, jsFilePath: string, url: string): Promise<Record<string, string | null>> {
     try {
-        const jsModule = await import(jsFilePath);
+        // Преобразование пути в формат file://
+        const jsFileUrl = pathToFileURL(jsFilePath).href;
+        const jsModule = await import(jsFileUrl);
+        
         if (typeof jsModule.extractMetadata !== 'function') {
             throw new Error(`No extractMetadata function found in ${jsFilePath}`);
         }
         // Call the `extractMetadata` function from the JS module
-        return await page.evaluate(jsModule.extractMetadata);
+        return await page.evaluate(jsModule.extractMetadata, { url });
     } catch (error) {
         const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
         logError(`Error executing JS extraction file: ${errorMessage}`);
@@ -66,7 +71,15 @@ async function extractMetafields(page: Page, metaRule: MetadataExtractionRule): 
 }
 
 // Function to extract data from each page
-export async function extractData(page: Page, jsonFolderPath: string, htmlFolderPath: string, matchingMetadataExtraction: MetadataExtractionRule[], url: string): Promise<void> {
+export async function extractData(
+    page: Page, 
+    jsonFolderPath: string, 
+    htmlFolderPath: string, 
+    matchingMetadataExtraction: MetadataExtractionRule[], 
+    url: string, 
+    dbClient?: DatabaseClient
+): Promise<void> {
+    
     const task = matchingMetadataExtraction[0];
 
     let meta_data: Record<string, string | null> = {};
@@ -75,7 +88,7 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
     if (task.js_extraction_path) {
         const jsFilePath = path.resolve(__dirname, task.js_extraction_path);
         logInfo(`Using custom JS extraction from ${jsFilePath}`);
-        meta_data = await executeJsExtractor(page, jsFilePath);
+        meta_data = await executeJsExtractor(page, jsFilePath, url);
     } else {
         // Otherwise, use the standard selector-based extraction
         logInfo(`Using selector-based extraction for ${url}`);
@@ -87,9 +100,6 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
         return;
     }
 
-    // Add URL to metadata
-    meta_data["217"] = url; //Подумать что делать с url
-
     // Generate a unique filename based on the URL
     const encodedUrl = encodeURIComponent(url);
     const baseFileName = crypto.createHash('md5').update(encodedUrl).digest('hex');
@@ -99,6 +109,15 @@ export async function extractData(page: Page, jsonFolderPath: string, htmlFolder
     // Save metadata to JSON file
     fs.writeFileSync(jsonFilePath, JSON.stringify(meta_data, null, 2));
     logInfo(`Successful extraction from ${url}: ${jsonFilePath}`);
+
+    if (dbClient) {
+        try {
+            await dbClient.saveMetadata(meta_data, {url: url, baseFileName: baseFileName});
+            logInfo(`Metadata saved to database for ${url}`);
+        } catch (error) {
+            logError(`Failed to save metadata to database for ${url}: ${error}`);
+        }
+    }
 
     // Save the HTML page for further analysis
     const htmlFilePath = path.join(htmlFolderPath, `${baseFileName}.html`);
