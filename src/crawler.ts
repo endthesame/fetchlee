@@ -4,16 +4,17 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import { extractData } from './extractor';
 import URLFrontier from './frontier';
-import { logInfo, logError } from './logger';
+import { logInfo, logError, logWarn } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp } from './utils/tor-config';
-import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule} from './interfaces/task'
+import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule, Interaction} from './interfaces/task'
 import path from "path";
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
 import { getDatabaseConfig } from './config/database.config';
 import { CloudflareHandler } from './utils/cloudflare-handler';
 import { MouseSimulator } from './utils/mouse-simulator';
+import { PageInteractionManager } from './interactor';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
@@ -21,12 +22,6 @@ puppeteer.use(StealthPlugin());
 interface ViewportSettings {
     width: number;
     height: number;
-}
-
-interface Action {
-    action: string;
-    selector?: string;
-    value?: string;
 }
 
 interface CrawlOptions {
@@ -68,7 +63,7 @@ async function initializeBrowser(useTor?: boolean, headless?: boolean, viewportO
             launchOptions.args?.push('--proxy-server=127.0.0.1:8118');
             logInfo('Tor is enabled');
         } else {
-            logError('Tor is not enabled, switching to normal mode');
+            logWarn('Tor is not enabled, switching to normal mode');
         }
     }
 
@@ -77,30 +72,6 @@ async function initializeBrowser(useTor?: boolean, headless?: boolean, viewportO
     await page.setViewport(viewportOptions);
     logInfo('Browser initialized.');
     return { browser, page };
-}
-
-async function performActions(page: Page, actions: Action[]): Promise<void> {
-    for (const action of actions) {
-        switch (action.action) {
-            case 'waitForSelector':
-                if (action.selector) await page.waitForSelector(action.selector);
-                break;
-            case 'click':
-                if (action.selector) {
-                    await page.click(action.selector);
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
-                }
-                break;
-            case 'type':
-                if (action.selector && action.value) await page.type(action.selector, action.value);
-                break;
-            case 'waitForTimeout':
-                if (action.value) await delay(parseInt(action.value, 10));
-                break;
-            default:
-                logError(`Unknown action: ${action.action}`);
-        }
-    }
 }
 
 function transformUrl(url: string, transformations: LinkTransformationRule[]): string {
@@ -246,6 +217,8 @@ export async function crawl(
         browser = browserPage.browser;
         page = browserPage.page;
 
+        const pageInteractionManager = new PageInteractionManager(page);
+
         // Start simulating mouse movement
         if (options.simulateMouse) {
             mouseSimulator = new MouseSimulator(page);
@@ -278,33 +251,34 @@ export async function crawl(
                 
                 await delay(options.crawlDelay || 0); // Delay between requests
 
-                const actionsBeforeExtraction = task.actions_before_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
-                if (actionsBeforeExtraction && actionsBeforeExtraction.length > 0) {
-                    for (const action of actionsBeforeExtraction) {
-                        await performActions(page, action.actions);
-                        logInfo(`Performed actions before extraction for ${url}`);
+                // Interaction rules
+                if (task.interaction_rules) {
+                    const matchingInteractionRules = task.interaction_rules
+                        .filter((rule: Interaction) => url && new RegExp(rule.url_pattern).test(url));
+    
+                    for (const ruleSet of matchingInteractionRules) {
+                        for (const rule of ruleSet.rules) {
+                            await pageInteractionManager.executeInteractionRule(rule);
+                        }
                     }
                 }
 
                 // Links extraction
                 if (matchingRules && matchingRules.length > 0) {
-                    const newLinks = await extractLinks(page, matchingRules, task.links_transformation); // TODO: собирать ссылки из определенных селекторов
+                    const newLinks = await extractLinks(page, matchingRules, task.links_transformation);
                     await frontier?.addUrls(newLinks);
                     logInfo(`Extracted ${newLinks.length} links from ${url}`);
                 }
 
-                const matchingMetadataExtraction = task.metadata_extraction?.filter((pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url));
+                // Metadata extraction
+                const matchingMetadataExtraction = task.metadata_extraction?.filter(
+                    (pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url)
+                );
+                
                 if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
                     await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url, dbClient);
                 }
 
-                const actionsAfterExtraction = task.actions_after_extraction?.filter((pattern: any) => url && new RegExp(pattern.url_pattern).test(url));
-                if (actionsAfterExtraction && actionsAfterExtraction.length > 0) {
-                    for (const action of actionsAfterExtraction) {
-                        await performActions(page, action.actions);
-                        logInfo(`Performed actions after extraction for ${url}`);
-                    }
-                }
 
                 logInfo(`Successfully processed ${url}`);
 

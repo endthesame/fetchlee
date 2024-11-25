@@ -1,3 +1,5 @@
+import { InteractionRule } from './interactor'
+
 interface LinkRuleTo {
     pattern: string;
     selector?: string;
@@ -35,10 +37,16 @@ interface LinkTransformationRule {
     baseUrl?: string;     // Опциональный базовый URL для относительных ссылок
 }
 
+interface Interaction {
+    url_pattern: string;
+    rules: InteractionRule[];
+}
+
 interface TaskConfig {
     crawl_rules: CrawlRule[];
     metadata_extraction: MetadataExtractionRule[]; // Массив правил извлечения метаданных
     links_transformation?: LinkTransformationRule[];
+    interaction_rules?: Interaction[];
 }
 
 export {
@@ -48,5 +56,6 @@ export {
     MetadataExtractionRule,
     TaskConfig,
     WaitForOptions,
-    LinkTransformationRule
+    LinkTransformationRule,
+    Interaction
 }
