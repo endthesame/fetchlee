@@ -10,7 +10,14 @@ interface CrawlRule {
     from: string;
     to?: LinkRuleTo[];
     waitFor?: WaitForOptions; // используется для загрузки и ожидания страницы из from
+    blockRule?: BlockRule
 }
+
+interface BlockRule {
+    url_patterns?: string[]; // Проверка URL
+    selectors?: string[]; // Проверка селектора
+    xpaths?: string[]; // Проверка XPath
+};
 
 interface WaitForOptions {
     selector?: string; // селектор для ожидания, если есть
@@ -57,5 +64,6 @@ export {
     TaskConfig,
     WaitForOptions,
     LinkTransformationRule,
-    Interaction
+    Interaction,
+    BlockRule
 }

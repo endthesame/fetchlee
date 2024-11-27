@@ -1,9 +1,10 @@
 import path from 'path';
 import { exec } from 'child_process';
-import { logInfo, logError } from '../logger';
+import { logInfo, logError, logWarn } from '../logger';
 import { getCurrentIP } from './utils';
 import { changingIPProcess } from './changeTorIp';
 import { Page } from "puppeteer";
+import { BlockRule } from '../interfaces/task'
 
 export async function changeTorIp(): Promise<Boolean> {
     try {
@@ -17,42 +18,43 @@ export async function changeTorIp(): Promise<Boolean> {
     }
 }
 
-export async function shouldChangeIP(page: Page): Promise<boolean> {
-    const status = await page.evaluate(() => {
-        return document.readyState; // Используйте любые данные или свойства, которые позволяют вам определить состояние страницы.
-    });
-    const currentURL = page.url();
+export async function shouldChangeIP(page: Page, blockRule: BlockRule): Promise<boolean> {
+    const currentUrl = page.url();
 
-    // const isTitleAvailable = await page.evaluate(() => {
-    //     if (document.querySelector('.uk-article-title')){
-    //         return true;
-    //     } else {
-    //         return false;
-    //     }
-    // });
-
-    // const error403 = await page.evaluate(() => {
-    //     if (document.querySelector('.explanation-message')){
-    //         return true
-    //     }
-    //     else if (document.querySelector('h1')){
-    //         if (document.querySelector('h1')?.textContent === "403 Forbidden"){
-    //             return true;
-    //         }
-    //     }
-    //     else {
-    //         return false
-    //     }
-    // });
-
-    // Условие для смены IP-адреса, включая статус код и паттерн в URL
-    if (Number(status) > 399 || currentURL.includes("hcvalidate.perfdrive")) {
-        logInfo('Changing IP address...');
-        await new Promise(resolve => setTimeout(resolve, 15000)); // чтобы тор не таймаутил
-        await changeTorIp();
-        logInfo('IP address changed successfully.');
-        await getCurrentIP();
-        return true;
+    if (blockRule.url_patterns){
+        for (const url_pattern of blockRule.url_patterns){
+            if (url_pattern && new RegExp(url_pattern).test(currentUrl)) {
+                logInfo(`${currentUrl}: URL block rule matched: ${currentUrl}`);
+                return true;
+            }
+        }
     }
-    return false;
+    
+    if (blockRule.selectors){
+        for (const selector of blockRule.selectors){
+            const isNegation = selector.startsWith('!');
+            const actualSelector = isNegation ? selector.slice(1) : selector;
+    
+            const elementExists = await page.$(actualSelector);
+            if ((isNegation && !elementExists) || (!isNegation && elementExists)) {
+                logInfo(`${currentUrl}: Selector block rule matched: ${selector}`);
+                return true;
+            }
+        }
+    }
+
+    if (blockRule.xpaths){
+        for (const xpath of blockRule.xpaths) {
+            const isNegation = xpath.startsWith('!');
+            const actualXPath = isNegation ? xpath.slice(1) : xpath;
+    
+            const elementExists = await page.$$(`::-p-xpath(${actualXPath})`);
+            if ((!isNegation && elementExists.length > 0) || (isNegation && elementExists.length === 0)) {
+                logInfo(`${currentUrl}: XPath block rule matched: ${xpath}`);
+                return true;
+            }
+        }
+    }
+
+    return false; // Блокировки нет
 }

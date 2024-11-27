@@ -6,8 +6,8 @@ import { extractData } from './extractor';
 import URLFrontier from './frontier';
 import { logInfo, logError, logWarn } from './logger';
 import { delay } from './utils/utils';
-import { changeTorIp } from './utils/tor-config';
-import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule, Interaction} from './interfaces/task'
+import { changeTorIp, shouldChangeIP } from './utils/tor-config';
+import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule, Interaction, BlockRule} from './interfaces/task'
 import path from "path";
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
@@ -144,12 +144,23 @@ async function extractLinks(page: Page, rules: CrawlRule[], transformations: Lin
     return allLinks;
 }
 
+async function handleBlockDetection(page: Page, blockRule: BlockRule): Promise<boolean> {
+    if (blockRule && await shouldChangeIP(page, blockRule)) {
+        logInfo(`Block detected. Changing IP...`);
+        await changeTorIp();
+        return true;
+    }
+    return false;
+}
+
 async function navigateWithRetry(
     page: Page, 
     url: string, 
     waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }, 
     handleCloudflare: boolean = false, 
-    maxRetries: number = 3
+    maxRetries: number = 3,
+    useTor: boolean = false,
+    blockRule: BlockRule
 ): Promise<Boolean> {
     let attempts = 0;
     const cloudflareHandler = handleCloudflare ? new CloudflareHandler(page) : null;
@@ -174,10 +185,20 @@ async function navigateWithRetry(
                 await page.waitForSelector(waitForOptions.selector, { timeout: waitForOptions.timeout });
             }
 
+            // Проверяем блокировки после загрузки страницы
+            if (useTor && (await handleBlockDetection(page, blockRule))) {
+                continue; // Если IP сменился, пробуем снова
+            }
+
             return true;
         } catch (error: any) {
             const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
             logError(`Error loading ${url}: ${errorMessage}. Retrying (${attempts + 1}/${maxRetries})...`);
+
+            if (useTor && (await handleBlockDetection(page, blockRule))) {
+                continue; // Если IP сменился, пробуем снова
+            }
+
             attempts++;
             await delay(3000);
         }
@@ -237,9 +258,13 @@ export async function crawl(
                 if (matchingRules && matchingRules.length > 0) {
                     waitForOptions = matchingRules[0].waitFor || waitForOptions; // Применяем waitFor из первого совпадения или дефолт
                 }
+                let blockRule: BlockRule = {};
+                if (matchingRules && matchingRules.length > 0) {
+                    blockRule = matchingRules[0].blockRule || blockRule;
+                }
 
                 logInfo(`Processing ${url}`);
-                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare);
+                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare, 3, options.useTor, blockRule);
                 if (!urlLoaded) {
                     frontier.markFailed(url);
                     continue;
