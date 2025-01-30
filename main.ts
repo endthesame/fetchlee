@@ -61,15 +61,18 @@ async function main() {
         .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
         .option('--use_database', 'save metadata to database')
-        .option('--frontier_state_path <path>', 'path to frontier state sqlite db file')
+        .option('--frontier_state <path>', 'path to frontier state sqlite db file')
         .option('--clear_history', 'clear history from frontier about links connected to selected coll')
         .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
         .option('--simulate_mouse', 'enable mouse simulating')
+        .option('--browser_config <path>', 'path to browser json config file')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
 
-            const frontierDBPath = options.frontier_state_path ? path.resolve(options.frontier_state_path) : undefined;
+            const frontierDBPath = options.frontier_state ? path.resolve(options.frontier_state) : undefined;
+
+            const browserConfigPath = options.browser_config ? path.resolve(options.browser_config) : undefined;
 
             logInfo(`Crawling started. Collection name: ${globalOptions.coll_name}; Output folder: ${globalOptions.output}`);
             logInfo("Directories are set up.");
@@ -86,7 +89,8 @@ async function main() {
                 useDatabase: options.use_database,
                 collName:globalOptions.coll_name,
                 handleCloudflare: options.handle_cloudflare,
-                simulateMouse: options.simulate_mouse
+                simulateMouse: options.simulate_mouse,
+                browserConfigPath: browserConfigPath
             });
 
             // if (options.download_pdf) {

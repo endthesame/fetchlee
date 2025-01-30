@@ -15,14 +15,10 @@ import { getDatabaseConfig } from './config/database.config';
 import { CloudflareHandler } from './utils/cloudflare-handler';
 import { MouseSimulator } from './utils/mouse-simulator';
 import { PageInteractionManager } from './interactor';
+import { loadBrowserConfig } from './utils/config-loader'
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
-
-interface ViewportSettings {
-    width: number;
-    height: number;
-}
 
 interface CrawlOptions {
     taskPath: string;
@@ -38,6 +34,7 @@ interface CrawlOptions {
     collName: string;
     handleCloudflare?: boolean;
     simulateMouse?: boolean;
+    browserConfigPath?: string;
 }
 
 function initializeFrontier(
@@ -74,23 +71,38 @@ function initializeFrontier(
     return frontier;
 }
 
-async function initializeBrowser(useTor?: boolean, headless?: boolean, viewportOptions: ViewportSettings = {width: 1280, height: 720}): Promise<{ browser: Browser; page: Page }> {
-    const launchOptions: PuppeteerLaunchOptions = { headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox'] };
-    if (headless) launchOptions.headless = headless;
-    if (useTor) {
+async function initializeBrowser(
+    options: CrawlOptions
+): Promise<{ browser: Browser; page: Page }> {
+    const config = loadBrowserConfig(options.browserConfigPath);
+    // Базовые настройки запуска
+    const launchOptions: PuppeteerLaunchOptions = {
+        headless: options.headless || config.headless,
+        args: config.args,
+        timeout: config.timeout,
+        executablePath: config.executablePath,
+        userDataDir: config.userDataDir
+    };
+
+    // Обработка Tor (добавляем поверх конфига)
+    if (options.useTor) {
         const isTorEnabled = await changeTorIp();
         if (isTorEnabled) {
             launchOptions.args?.push('--proxy-server=127.0.0.1:8118');
-            logInfo('Tor is enabled');
-        } else {
-            logWarn('Tor is not enabled, switching to normal mode');
+            logInfo('Tor proxy enabled');
         }
     }
 
     const browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
-    await page.setViewport(viewportOptions);
-    logInfo('Browser initialized.');
+
+    if (config.defaultViewport) {
+        await page.setViewport({
+            width: config.defaultViewport.width,
+            height: config.defaultViewport.height
+        });
+    }
+
     return { browser, page };
 }
 
@@ -254,7 +266,7 @@ export async function crawl(
         frontier = initializeFrontier(seedFilePath, {collName: options.collName, frontierStatePath: options.frontierStatePath, clearHistory: options.clearHistory});
 
         const viewportOptions = { width: 1280, height: 720 }
-        const browserPage = await initializeBrowser(options.useTor, options.headless, viewportOptions);
+        const browserPage = await initializeBrowser(options);
         browser = browserPage.browser;
         page = browserPage.page;
 
