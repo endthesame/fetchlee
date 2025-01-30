@@ -69,3 +69,4 @@ package-lock.json
 /lib/
 .env
 /dist
+/data

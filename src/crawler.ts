@@ -3,7 +3,7 @@ import { Browser, Page, PuppeteerLaunchOptions } from "puppeteer";
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import { extractData } from './extractor';
-import URLFrontier from './frontier';
+import SQLiteFrontier from './frontier';
 import { logInfo, logError, logWarn } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp, shouldChangeIP } from './utils/tor-config';
@@ -33,22 +33,42 @@ interface CrawlOptions {
     crawlDelay?: number;
     headless?: boolean;
     frontierStatePath?: string;
-    frontierSaveStatePath?: string | null;
+    clearHistory?: boolean;
     useDatabase?: boolean;
     collName: string;
     handleCloudflare?: boolean;
     simulateMouse?: boolean;
 }
 
-function initializeFrontier(seedFilePath: string, frontierStatePath?: string, frontierSaveStatePath?: string | null): URLFrontier {
-    const frontier = new URLFrontier({frontierSaveStatePath});
+function initializeFrontier(
+    seedFilePath: string,
+    options: {
+        frontierStatePath?: string;
+        collName: string;
+        clearHistory?: boolean;
+    }
+): SQLiteFrontier {
+    const frontier = new SQLiteFrontier({
+        frontierStatePath: options.frontierStatePath,
+        collName: options.collName
+    });
 
-    if (frontierStatePath && fs.existsSync(frontierStatePath)) {
-        frontier.loadState(frontierStatePath);
-    } else {
-        const seeds = fs.readFileSync(seedFilePath, 'utf-8').split('\n').filter(url => url.trim() !== '');
+    try {
+        // Очистка истории при наличии флага
+        if (options.clearHistory) {
+            frontier.clearCollection();
+        }
+
+        const seeds = fs.readFileSync(seedFilePath, 'utf-8')
+            .split('\n')
+            .filter(url => url.trim() !== '');
+        
         frontier.addUrls(seeds);
-        logInfo(`Frontier initialized with ${seeds.length} seeds.`);
+        logInfo(`Initialized frontier for collection "${options.collName}" with ${seeds.length} seeds`);
+    } catch (error) {
+        const errorMessage = (error instanceof Error) ? error.message : 'Unknown error';
+        logError(`Failed to initialize frontier: ${errorMessage}`);
+        throw error;
     }
 
     return frontier;
@@ -219,7 +239,7 @@ export async function crawl(
     let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
     let dbClient: DatabaseClient | undefined;
     let mouseSimulator: MouseSimulator | undefined;
-    let frontier: URLFrontier | undefined;
+    let frontier: SQLiteFrontier | undefined;
 
     try {
         if (options.useDatabase) {
@@ -231,7 +251,7 @@ export async function crawl(
 
         const taskData = fs.readFileSync(options.taskPath, 'utf-8');
         const task = JSON.parse(taskData);
-        frontier = initializeFrontier(seedFilePath, options.frontierStatePath, options.frontierSaveStatePath);
+        frontier = initializeFrontier(seedFilePath, {collName: options.collName, frontierStatePath: options.frontierStatePath, clearHistory: options.clearHistory});
 
         const viewportOptions = { width: 1280, height: 720 }
         const browserPage = await initializeBrowser(options.useTor, options.headless, viewportOptions);
@@ -247,7 +267,7 @@ export async function crawl(
 
         while (frontier.hasMoreUrls()) {
             try {
-                url = await frontier.getNextUrl();
+                const url = await frontier.getNextUrl();
                 if (!url) break;
 
                 mouseSimulator?.simulateMouseMovement(0, viewportOptions.width, 0, viewportOptions.height, 50, 500);
@@ -269,8 +289,6 @@ export async function crawl(
                     frontier.markFailed(url);
                     continue;
                 }
-
-                await frontier.markVisited(url);
 
                 await mouseSimulator?.stopMouseMovement();
                 
@@ -304,10 +322,13 @@ export async function crawl(
                     await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url, dbClient);
                 }
 
-
+                await frontier.markCompleted(url);
                 logInfo(`Successfully processed ${url}`);
 
             } catch (error) {
+                if (url){
+                    await frontier.markFailed(url);
+                }
                 await mouseSimulator?.stopMouseMovement();
                 const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
                 logError(`Error processing ${url || 'unknown URL'}: ${errorMessage}`);

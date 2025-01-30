@@ -61,16 +61,15 @@ async function main() {
         .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
         .option('--use_database', 'save metadata to database')
-        .option('--frontier_load_state <path>', 'path to frontier state file')
-        .option('--frontier_save_state [path]', 'flag to save frontier state and optional path to save')
+        .option('--frontier_state_path <path>', 'path to frontier state sqlite db file')
+        .option('--clear_history', 'clear history from frontier about links connected to selected coll')
         .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
         .option('--simulate_mouse', 'enable mouse simulating')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
             const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
 
-            const frontierStatePath = options.frontier_load_state ? path.resolve(options.frontier_load_state) : undefined;
-            const frontierSaveStatePath = options.frontier_save_state ? path.resolve(typeof options.frontier_save_state === 'string' ? options.frontier_save_state : siteFolderPath) : undefined;
+            const frontierDBPath = options.frontier_state_path ? path.resolve(options.frontier_state_path) : undefined;
 
             logInfo(`Crawling started. Collection name: ${globalOptions.coll_name}; Output folder: ${globalOptions.output}`);
             logInfo("Directories are set up.");
@@ -82,8 +81,8 @@ async function main() {
                 uploadViaSSH: options.upload_ssh,
                 crawlDelay: parseInt(options.delay),
                 headless: options.headless,
-                frontierStatePath: frontierStatePath,
-                frontierSaveStatePath: frontierSaveStatePath,
+                frontierStatePath: frontierDBPath,
+                clearHistory: options.clear_history,
                 useDatabase: options.use_database,
                 collName:globalOptions.coll_name,
                 handleCloudflare: options.handle_cloudflare,

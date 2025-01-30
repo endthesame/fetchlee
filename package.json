@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "arangojs": "^9.1.0",
+    "better-sqlite3": "^11.8.1",
     "commander": "^12.1.0",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.4.5",
