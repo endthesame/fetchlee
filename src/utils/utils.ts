@@ -5,7 +5,7 @@ export async function getCurrentIP(): Promise<string> {
     return new Promise((resolve, reject) => {
         const options = {
             url: 'https://api.ipify.org',
-            proxy: 'http://127.0.0.1:8118', // Proxy
+            proxy: 'http://127.0.0.1:8118',
         };
 
         request(options, (error, response, body) => {

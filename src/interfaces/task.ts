@@ -1,35 +1,35 @@
 import { InteractionRule } from './interactor'
 
 interface LinkRuleTo {
-    pattern: string;
-    selector?: string;
-    ignoreInnerLinks?: boolean; // Дополнительный параметр для управления внутренними ссылками
+    pattern: string; // The regexp is specified by which links will be selected
+    selector?: string; // The selector is specified by which links will be selected
+    ignoreInnerLinks?: boolean; // Additional parameter for managing internal links
 }
 
 interface CrawlRule {
-    from: string;
+    from: string; // the pattern of the link on which subsequent actions will take place is indicated
     to?: LinkRuleTo[];
-    waitFor?: WaitForOptions; // используется для загрузки и ожидания страницы из from
+    waitFor?: WaitForOptions; // used to load and wait for a page from "from"
     blockRule?: BlockRule
 }
 
 interface BlockRule {
-    url_patterns?: string[]; // Проверка URL
-    selectors?: string[]; // Проверка селектора
-    xpaths?: string[]; // Проверка XPath
+    url_patterns?: string[]; // Check URL
+    selectors?: string[]; // Check selector
+    xpaths?: string[]; // Check XPath
 };
 
 interface WaitForOptions {
-    selector?: string; // селектор для ожидания, если есть
-    timeout?: number;  // таймаут для ожидания
-    load?: "networkidle0" | "networkidle2" | "domcontentloaded"; // опционально: тип загрузки
+    selector?: string; // selector to wait for if any
+    timeout?: number;  // timeout for waiting
+    load?: "networkidle0" | "networkidle2" | "domcontentloaded"; // type of loading
 }
 
 interface MetadataField {
-    selector: string | string[];  // Селектор или список селекторов для извлечения (список: используется первый найденный, который вернул не null и не "")
-    property?: string;            // Опциональное свойство для указания атрибута или свойства
-    collectAll?: boolean;         // Флаг для сбора всех данных по селектору
-    delimiter?: string;           // Разделитель для данных, если collectAll = true
+    selector: string | string[]; // // Selector or list of selectors to retrieve (list: the first one found that returns neither null nor "" is used)
+    property?: string; // specifying an attribute or property
+    collectAll?: boolean; // Flag for collecting all data by selector
+    delimiter?: string; // Separator for data if collectAll = true
 }
 
 interface MetadataExtractionRule {
@@ -39,9 +39,9 @@ interface MetadataExtractionRule {
 }
 
 interface LinkTransformationRule {
-    pattern: string;      // Паттерн для поиска ссылок, которые нужно преобразовать
-    transform: string;    // Шаблон для преобразования. Может содержать $1, $2 и т.д. для групп
-    baseUrl?: string;     // Опциональный базовый URL для относительных ссылок
+    pattern: string; // Pattern for finding links to convert
+    transform: string; // // Template for transform. May contain $1, $2, etc. for groups
+    baseUrl?: string; // Optional base URL for relative links
 }
 
 interface Interaction {
@@ -51,7 +51,7 @@ interface Interaction {
 
 interface TaskConfig {
     crawl_rules: CrawlRule[];
-    metadata_extraction: MetadataExtractionRule[]; // Массив правил извлечения метаданных
+    metadata_extraction: MetadataExtractionRule[];
     links_transformation?: LinkTransformationRule[];
     interaction_rules?: Interaction[];
 }
