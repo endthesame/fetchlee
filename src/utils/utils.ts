@@ -1,21 +1,13 @@
-import request from 'request';
-import { logInfo, logError } from '../logger';
-
 export async function getCurrentIP(): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const options = {
-            url: 'https://api.ipify.org',
-            proxy: 'http://127.0.0.1:8118',
-        };
-
-        request(options, (error, response, body) => {
-            if (!error && response.statusCode === 200) {
-                resolve(body);
-            } else {
-                reject(error);
-            }
-        });
+    const response = await fetch('https://api.ipify.org', {
+        method: 'GET'
     });
+
+    if (!response.ok) {
+        throw new Error(`Unable to fetch current IP. Status: ${response.status}`);
+    }
+
+    return response.text();
 }
 
 export async function delay(time: number): Promise<void> {

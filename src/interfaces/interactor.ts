@@ -20,6 +20,14 @@ export interface InteractionRule {
     afterDelay?: number;
 }
 
+export interface InteractionExecutionResult {
+    success: boolean;
+    errors: string[];
+    startUrl: string;
+    endUrl: string;
+    urlChanged: boolean;
+}
+
 export interface PageAction {
     type: 'click' | 'type' | 'scroll' | 'hover' | 'select' | 'evaluate' | 'waitFor' | 'extract';
     target?: string;

@@ -4,36 +4,37 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import { extractData } from './extractor';
 import SQLiteFrontier from './frontier';
-import { logInfo, logError, logWarn } from './logger';
+import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 import { changeTorIp, shouldChangeIP } from './utils/tor-config';
-import { CrawlRule, MetadataExtractionRule, WaitForOptions, LinkTransformationRule, Interaction, BlockRule} from './interfaces/task'
-import path from "path";
+import {
+    CrawlRule,
+    MetadataExtractionRule,
+    WaitForOptions,
+    LinkTransformationRule,
+    Interaction,
+    BlockRule,
+    TaskConfig
+} from './interfaces/task'
 import { DatabaseClient } from './database/database.interface';
 import { DatabaseFactory } from './database/database.factory';
 import { getDatabaseConfig } from './config/database.config';
-import { CloudflareHandler } from './utils/cloudflare-handler';
-import { MouseSimulator } from './utils/mouse-simulator';
 import { PageInteractionManager } from './interactor';
 import { loadBrowserConfig } from './utils/config-loader'
+import { loadTaskConfig } from './task-loader';
 
 const puppeteer: PuppeteerExtra = require('puppeteer-extra');
 puppeteer.use(StealthPlugin());
 
 interface CrawlOptions {
     taskPath: string;
-    downloadPDFmark?: boolean;
-    checkOpenAccess?: boolean;
     useTor?: boolean;
-    uploadViaSSH?: boolean;
     crawlDelay?: number;
     headless?: boolean;
     frontierStatePath?: string;
     clearHistory?: boolean;
     useDatabase?: boolean;
     collName: string;
-    handleCloudflare?: boolean;
-    simulateMouse?: boolean;
     browserConfigPath?: string;
 }
 
@@ -189,13 +190,11 @@ async function navigateWithRetry(
     page: Page, 
     url: string, 
     waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }, 
-    handleCloudflare: boolean = false, 
     maxRetries: number = 3,
     useTor: boolean = false,
     blockRule: BlockRule
 ): Promise<Boolean> {
     let attempts = 0;
-    const cloudflareHandler = handleCloudflare ? new CloudflareHandler(page) : null;
     const navigationOptions = { 
         waitUntil: waitForOptions.load || "networkidle2", 
         timeout: waitForOptions.timeout || 60000 
@@ -205,13 +204,6 @@ async function navigateWithRetry(
         try {
             
             await page.goto(url, navigationOptions);
-
-            if (cloudflareHandler) {
-                const result = await cloudflareHandler.handleNavigation(url);
-                if (!result) {
-                    throw new Error('Failed to handle Cloudflare challenge');
-                }
-            }
 
             if (waitForOptions.selector) {
                 await page.waitForSelector(waitForOptions.selector, { timeout: waitForOptions.timeout });
@@ -239,18 +231,49 @@ async function navigateWithRetry(
     return false;
 }
 
+function getInteractionRules(task: TaskConfig, stage: 'pre' | 'post', url: string): Interaction[] {
+    const stageRules = task.interactions?.[stage];
+    if (stageRules && stageRules.length > 0) {
+        return stageRules.filter((rule) => new RegExp(rule.url_pattern).test(url));
+    }
+    return [];
+}
+
+async function executeInteractionStage(
+    manager: PageInteractionManager,
+    task: TaskConfig,
+    stage: 'pre' | 'post',
+    contextUrl: string
+): Promise<{ ok: boolean; currentUrl: string }> {
+    const matchingRuleSets = getInteractionRules(task, stage, contextUrl);
+    let currentUrl = contextUrl;
+
+    for (const ruleSet of matchingRuleSets) {
+        for (const rule of ruleSet.rules) {
+            const result = await manager.executeInteractionRule(rule);
+            if (!result.success) {
+                return { ok: false, currentUrl: result.endUrl };
+            }
+
+            currentUrl = result.endUrl;
+            if (result.urlChanged) {
+                logInfo(`[interactions:${stage}] URL changed: ${result.startUrl} -> ${result.endUrl}`);
+            }
+        }
+    }
+
+    return { ok: true, currentUrl };
+}
+
 export async function crawl(
     jsonFolderPath: string, 
-    pdfFolderPath: string, 
     htmlFolderPath: string, 
-    siteFolderPath: string, 
     seedFilePath: string, 
     options: CrawlOptions
 ): Promise<void> {
 
-    let browser: Browser | undefined, page: Page | undefined, url: string | undefined;
+    let browser: Browser | undefined, page: Page | undefined;
     let dbClient: DatabaseClient | undefined;
-    let mouseSimulator: MouseSimulator | undefined;
     let frontier: SQLiteFrontier | undefined;
 
     try {
@@ -261,103 +284,105 @@ export async function crawl(
             await dbClient.connect();
         }
 
-        const taskData = fs.readFileSync(options.taskPath, 'utf-8');
-        const task = JSON.parse(taskData);
+        const task = loadTaskConfig(options.taskPath);
         frontier = initializeFrontier(seedFilePath, {collName: options.collName, frontierStatePath: options.frontierStatePath, clearHistory: options.clearHistory});
 
-        const viewportOptions = { width: 1280, height: 720 }
         const browserPage = await initializeBrowser(options);
         browser = browserPage.browser;
         page = browserPage.page;
-
         const pageInteractionManager = new PageInteractionManager(page);
 
-        // Start simulating mouse movement
-        if (options.simulateMouse) {
-            mouseSimulator = new MouseSimulator(page);
-        }
-
         while (frontier.hasMoreUrls()) {
+            let seedUrl: string | null = null;
             try {
-                const url = await frontier.getNextUrl();
-                if (!url) break;
+                seedUrl = await frontier.getNextUrl();
+                if (!seedUrl) break;
+                const processingUrl = seedUrl;
+                let currentUrl = processingUrl;
 
-                mouseSimulator?.simulateMouseMovement(0, viewportOptions.width, 0, viewportOptions.height, 50, 500);
-
-                const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => url && new RegExp(rule.from).test(url));
-                let waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 }; // дефолтные waitForOptions
-                // Если найдено соответствующее правило, используем его waitFor настройки
+                const matchingRules = task.crawl_rules?.filter((rule: CrawlRule) => new RegExp(rule.from).test(processingUrl));
+                let waitForOptions: WaitForOptions = { load: "networkidle2", timeout: 60000 };
                 if (matchingRules && matchingRules.length > 0) {
-                    waitForOptions = matchingRules[0].waitFor || waitForOptions; // Применяем waitFor из первого совпадения или дефолт
+                    waitForOptions = matchingRules[0].waitFor || waitForOptions;
                 }
+
                 let blockRule: BlockRule = {};
                 if (matchingRules && matchingRules.length > 0) {
                     blockRule = matchingRules[0].blockRule || blockRule;
                 }
 
-                logInfo(`Processing ${url}`);
-                const urlLoaded = await navigateWithRetry(page, url, waitForOptions, options.handleCloudflare, 3, options.useTor, blockRule);
+                logInfo(`[navigate] Processing ${processingUrl}`);
+                const urlLoaded = await navigateWithRetry(page, processingUrl, waitForOptions, 3, options.useTor, blockRule);
                 if (!urlLoaded) {
-                    frontier.markFailed(url);
+                    await frontier.markFailed(processingUrl);
                     continue;
                 }
 
-                await mouseSimulator?.stopMouseMovement();
-                
-                await delay(options.crawlDelay || 0); // Delay between requests
+                currentUrl = page.url();
+                await delay(options.crawlDelay || 0);
 
-                // Interaction rules
-                if (task.interaction_rules) {
-                    const matchingInteractionRules = task.interaction_rules
-                        .filter((rule: Interaction) => url && new RegExp(rule.url_pattern).test(url));
-    
-                    for (const ruleSet of matchingInteractionRules) {
-                        for (const rule of ruleSet.rules) {
-                            await pageInteractionManager.executeInteractionRule(rule);
-                        }
-                    }
+                const preStageResult = await executeInteractionStage(
+                    pageInteractionManager,
+                    task,
+                    'pre',
+                    currentUrl
+                );
+                if (!preStageResult.ok) {
+                    logError(`[interactions:pre] failed for ${processingUrl}`);
+                    await frontier.markFailed(processingUrl);
+                    continue;
                 }
+                currentUrl = preStageResult.currentUrl;
 
-                // Links extraction
                 if (matchingRules && matchingRules.length > 0) {
-                    const newLinks = await extractLinks(page, matchingRules, task.links_transformation);
-                    await frontier?.addUrls(newLinks);
-                    logInfo(`Extracted ${newLinks.length} links from ${url}`);
+                    const newLinks = await extractLinks(page, matchingRules, task.links_transformation || []);
+                    await frontier.addUrls(newLinks);
+                    logInfo(`[extract_links] Extracted ${newLinks.length} links from ${currentUrl}`);
                 }
 
-                // Metadata extraction
                 const matchingMetadataExtraction = task.metadata_extraction?.filter(
-                    (pattern: MetadataExtractionRule) => url && new RegExp(pattern.url_pattern).test(url)
+                    (pattern: MetadataExtractionRule) => new RegExp(pattern.url_pattern).test(currentUrl)
                 );
                 
                 if (matchingMetadataExtraction && matchingMetadataExtraction.length > 0) {
-                    await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, url, dbClient);
+                    await extractData(page, jsonFolderPath, htmlFolderPath, matchingMetadataExtraction, currentUrl, dbClient);
+                    logInfo(`[extract_metadata] Extracted metadata from ${currentUrl}`);
                 }
 
-                await frontier.markCompleted(url);
-                logInfo(`Successfully processed ${url}`);
+                const postStageResult = await executeInteractionStage(
+                    pageInteractionManager,
+                    task,
+                    'post',
+                    currentUrl
+                );
+                if (!postStageResult.ok) {
+                    logError(`[interactions:post] failed for ${processingUrl}`);
+                    await frontier.markFailed(processingUrl);
+                    continue;
+                }
+
+                await frontier.markCompleted(processingUrl);
+                logInfo(`[finalize] Successfully processed ${processingUrl}`);
 
             } catch (error) {
-                if (url){
-                    await frontier.markFailed(url);
+                if (seedUrl){
+                    await frontier.markFailed(seedUrl);
                 }
-                await mouseSimulator?.stopMouseMovement();
                 const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
-                logError(`Error processing ${url || 'unknown URL'}: ${errorMessage}`);
+                logError(`Error processing ${seedUrl || 'unknown URL'}: ${errorMessage}`);
             }
         }
     } catch (error) {
         const errorMessage = (error instanceof Error) ? error.stack : 'Unknown error';
         logError(`Critical error: ${errorMessage}`);
     } finally {
-        await mouseSimulator?.stopMouseMovement();
-
         if (browser) {
             logInfo('Closing browser.');
             await browser.close();
         }
 
         await dbClient?.disconnect();
+        frontier?.close();
     }
     logInfo('Crawling finished.');
 }

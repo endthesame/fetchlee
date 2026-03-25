@@ -4,7 +4,14 @@ import { Page } from "puppeteer";
 import { logInfo, logError } from './logger';
 import { delay } from './utils/utils';
 
-import { WaitCondition, PageState, InteractionRule, PageAction, ValidationRule} from './interfaces/interactor'
+import {
+    WaitCondition,
+    PageState,
+    InteractionRule,
+    PageAction,
+    ValidationRule,
+    InteractionExecutionResult
+} from './interfaces/interactor'
 
 export class PageInteractionManager {
     private page: Page;
@@ -90,11 +97,23 @@ export class PageInteractionManager {
                 case 'hover':
                     await this.page.hover(action.target || '');
                     break;
+                case 'select':
+                    if (!action.target || action.value === undefined) {
+                        throw new Error('Select action requires target and value');
+                    }
+                    await this.page.select(action.target, String(action.value));
+                    break;
                 case 'evaluate':
                     await this.page.evaluate(action.value);
                     break;
+                case 'waitFor':
+                    if (!action.value || typeof action.value !== 'object') {
+                        throw new Error('waitFor action requires condition object in value');
+                    }
+                    return this.waitForCondition(action.value as WaitCondition);
                 case 'extract':
-                    return await this.extractContent(action.target || '', action.options);
+                    await this.extractContent(action.target || '', action.options);
+                    return true;
             }
             return true;
         } catch (error) {
@@ -103,9 +122,11 @@ export class PageInteractionManager {
         }
     }
 
-    async executeInteractionRule(rule: InteractionRule): Promise<boolean> {
+    async executeInteractionRule(rule: InteractionRule): Promise<InteractionExecutionResult> {
         let attempts = 0;
         const maxAttempts = rule.retries || 3;
+        const startUrl = this.page.url();
+        const errors: string[] = [];
 
         while (attempts < maxAttempts) {
             try {
@@ -131,16 +152,32 @@ export class PageInteractionManager {
                 }
 
                 await this.savePageState();
-                return true;
+                const endUrl = this.page.url();
+                return {
+                    success: true,
+                    errors,
+                    startUrl,
+                    endUrl,
+                    urlChanged: startUrl !== endUrl
+                };
             } catch (error) {
-                logError(`Interaction rule failed: ${error}`);
+                const message = error instanceof Error ? error.message : String(error);
+                errors.push(message);
+                logError(`Interaction rule failed: ${message}`);
                 attempts++;
                 if (attempts < maxAttempts) {
                     await delay(2000);
                 }
             }
         }
-        return false;
+        const endUrl = this.page.url();
+        return {
+            success: false,
+            errors,
+            startUrl,
+            endUrl,
+            urlChanged: startUrl !== endUrl
+        };
     }
 
     private async validateResult(validation: ValidationRule): Promise<boolean> {
@@ -151,10 +188,10 @@ export class PageInteractionManager {
                     return !!element;
                 case 'content':
                     const content = await this.page.content();
-                    return (validation.value as RegExp).test(content);
+                    return this.toRegExp(validation.value).test(content);
                 case 'url':
                     const url = this.page.url();
-                    return (validation.value as RegExp).test(url);
+                    return this.toRegExp(validation.value).test(url);
                 case 'custom':
                     const result = await this.page.evaluate(
                         validation.value as (...args: any[]) => boolean | Promise<boolean>
@@ -167,6 +204,13 @@ export class PageInteractionManager {
             logError(`Validation failed: ${error}`);
             return false;
         }
+    }
+
+    private toRegExp(value: string | RegExp | ((...args: any[]) => boolean | Promise<boolean>)): RegExp {
+        if (value instanceof RegExp) {
+            return value;
+        }
+        return new RegExp(String(value));
     }
 
     async extractContent(selector: string, options: any = {}): Promise<any> {

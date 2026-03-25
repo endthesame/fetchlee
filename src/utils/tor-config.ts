@@ -1,6 +1,4 @@
-import path from 'path';
-import { exec } from 'child_process';
-import { logInfo, logError, logWarn } from '../logger';
+import { logInfo, logError } from '../logger';
 import { getCurrentIP } from './utils';
 import { changingIPProcess } from './changeTorIp';
 import { Page } from "puppeteer";

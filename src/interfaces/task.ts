@@ -49,10 +49,16 @@ interface Interaction {
     rules: InteractionRule[];
 }
 
+interface InteractionGroups {
+    pre?: Interaction[];
+    post?: Interaction[];
+}
+
 interface TaskConfig {
     crawl_rules: CrawlRule[];
     metadata_extraction: MetadataExtractionRule[];
     links_transformation?: LinkTransformationRule[];
+    interactions?: InteractionGroups;
     interaction_rules?: Interaction[];
 }
 
@@ -65,5 +71,6 @@ export {
     WaitForOptions,
     LinkTransformationRule,
     Interaction,
+    InteractionGroups,
     BlockRule
 }

@@ -3,7 +3,6 @@ import path from 'path';
 import { crawl } from './src/crawler';
 //import { parsing } from './src/parser';
 import { logInfo, logError } from './src/logger';
-//import { downloadPDFs } from './src/download-utils-puppeteer';
 import { Command } from 'commander';
 
 interface SetupOptions {
@@ -18,7 +17,6 @@ async function setupDirectories(options: SetupOptions) {
     const { coll_name, output, links } = options;
     const siteFolderPath = path.join(output, coll_name);
     const jsonFolderPath = path.join(siteFolderPath, 'jsons');
-    const pdfFolderPath = path.join(siteFolderPath, 'pdfs');
     const htmlFolderPath = path.join(siteFolderPath, 'htmls');
     const linksFilePath = path.join(siteFolderPath, 'remaining_links.txt');
 
@@ -26,7 +24,6 @@ async function setupDirectories(options: SetupOptions) {
     if (!fs.existsSync(output)) fs.mkdirSync(output);
     if (!fs.existsSync(siteFolderPath)) fs.mkdirSync(siteFolderPath);
     if (!fs.existsSync(jsonFolderPath)) fs.mkdirSync(jsonFolderPath);
-    if (!fs.existsSync(pdfFolderPath)) fs.mkdirSync(pdfFolderPath);
     if (!fs.existsSync(htmlFolderPath)) fs.mkdirSync(htmlFolderPath);
 
     // Copy file with links
@@ -34,7 +31,7 @@ async function setupDirectories(options: SetupOptions) {
         fs.copyFileSync(links, linksFilePath);
     }
 
-    return { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath };
+    return { jsonFolderPath, htmlFolderPath, linksFilePath };
 }
 
 async function main() {
@@ -42,7 +39,7 @@ async function main() {
 
     program
         .name('Crawler')
-        .description('Puppeteer crawler using Node.js. You can crawl metadata, download PDFs, check open access, etc.')
+        .description('Puppeteer crawler using Node.js. You can crawl metadata and save results.')
         .version('0.0.1')
         .option('-c, --coll_name <string>', 'collection name', 'default_host_name')
         .option('-o, --output <path>', 'path to output folder', path.join(__dirname, 'output'))
@@ -53,22 +50,17 @@ async function main() {
     // Crawling command
     program
         .command('crawl')
-        .description('Run the crawler and optionally download PDFs')
+        .description('Run the crawler')
         .option('--headless', 'headless mode for browser')
-        .option('-p, --download_pdf', 'download PDFs after crawling')
-        .option('-a, --open_access', 'check open access before download')
         .option('-t, --use_tor', 'use Tor for crawling')
-        .option('-s, --upload_ssh', 'upload source data via SSH')
         .option('-d, --delay <number>', 'delay between requests', '0')
         .option('--use_database', 'save metadata to database')
         .option('--frontier_state <path>', 'path to frontier state sqlite db file')
         .option('--clear_history', 'clear history from frontier about links connected to selected coll')
-        .option('--handle_cloudflare', 'enable Cloudflare challenge handling')
-        .option('--simulate_mouse', 'enable mouse simulating')
         .option('--browser_config <path>', 'path to browser json config file')
         .action(async (options) => {
             const globalOptions = program.opts<SetupOptions>();
-            const { siteFolderPath, jsonFolderPath, pdfFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
+            const { jsonFolderPath, htmlFolderPath, linksFilePath } = await setupDirectories(globalOptions);
 
             const frontierDBPath = options.frontier_state ? path.resolve(options.frontier_state) : undefined;
 
@@ -76,26 +68,17 @@ async function main() {
 
             logInfo(`Crawling started. Collection name: ${globalOptions.coll_name}; Output folder: ${globalOptions.output}`);
             logInfo("Directories are set up.");
-            await crawl(jsonFolderPath, pdfFolderPath, htmlFolderPath, siteFolderPath, linksFilePath, {
+            await crawl(jsonFolderPath, htmlFolderPath, linksFilePath, {
                 taskPath: path.resolve(__dirname, globalOptions.task || path.join(__dirname, 'tasks/sample_task.json')),
-                downloadPDFmark: options.download_pdf,
-                checkOpenAccess: options.open_access,
                 useTor: options.use_tor,
-                uploadViaSSH: options.upload_ssh,
                 crawlDelay: parseInt(options.delay),
                 headless: options.headless,
                 frontierStatePath: frontierDBPath,
                 clearHistory: options.clear_history,
                 useDatabase: options.use_database,
                 collName:globalOptions.coll_name,
-                handleCloudflare: options.handle_cloudflare,
-                simulateMouse: options.simulate_mouse,
                 browserConfigPath: browserConfigPath
             });
-
-            // if (options.download_pdf) {
-            //     await downloadPDFs(path.join(siteFolderPath, "Links.txt"), pdfFolderPath);
-            // }
         });
 
     // Parsing command

@@ -1,4 +1,4 @@
-import { Database, aql } from 'arangojs';
+import { Database } from 'arangojs';
 import { DatabaseClient, DatabaseConfig } from './database.interface';
 import { logError, logInfo } from '../logger';
 

@@ -1,120 +1,182 @@
-# Fetchlee - Puppeteer Crawler Using Tor
+# Fetchlee
 
-## Установка
+Fetchlee is a configurable web crawler built with TypeScript and Puppeteer.
+It is focused on link discovery + metadata extraction pipelines driven by JSON task files.
 
-```bash
-pip install -r requirements.txt # Install python libraries
-sudo apt install npm # npm install
-sudo n 18 # nodeJS 18 install
-npm i # Install JS libraries
-```
+## Features
 
-## Установка и настройка Tor и прочего  (если необходимо)
-```bash
-sudo apt-get install tor # Install tor
-sudo apt-get install privoxy # Install privoxy
-```
+- Headless/non-headless crawling with Puppeteer
+- Persistent URL frontier based on SQLite (`queued/processing/visited/failed`)
+- Configurable crawl rules and metadata extraction rules
+- Page interaction engine (`click`, `type`, `scroll`, `waitFor`, etc.)
+- Optional metadata persistence to ArangoDB
+- Optional Tor-based crawling mode
 
-### Настройка Tor
-Добавить в файл `/etc/tor/torrc`:
-```
-ControlPort 9051
-CookieAuthentication 0
-```
-предоставить доступ:
-```
-sudo chmod +r /run/tor/control.authcookie
-```
-### Настройка Privoxy
-Добавить в файл `/etc/privoxy/config`:
-```
-forward-socks5 / 127.0.0.1:9050 .
-```
-### Запустите Privoxy
-```
-sudo service privoxy start
-```
+## Project Status
 
-## Запуск (после компиляции)
-```
-node main.js
-```
+This project is under active development.
+Task format and crawler behavior are still evolving.
 
-## Запуск (ts файлов)
-```
-npx ts-node main.ts
-```
+## Requirements
 
-### Опции для запуска через консоль
+- Node.js 18+
+- npm
+- (Optional) Tor + Privoxy for `--use_tor`
+- (Optional) ArangoDB for `--use_database`
 
-При запуске `main.js`, вы можете использовать следующие опции:
-
-#### Глобальные опции (доступны для всех команд)
-
-| Опция                         | Описание                                                      | Значение по умолчанию                     |
-|-------------------------------|---------------------------------------------------------------|-------------------------------------------|
-| `-c, --coll_name <string>`     | Название коллекции                                            | `'default_host_name'`                     |
-| `-o, --output <path>`          | Путь к папке для сохранения результатов                       | `output`                                  |
-| `-e, --task <path>`            | Путь к файлу задачи для парсинга                              | `tasks/sample_task.js`                    |
-| `-l, --links <path>`           | Путь к файлу со ссылками                                      | `your_links_file.txt`                     |
-| `-h, --HELP`                   | Показать дополнительную информацию о доступных опциях         | `-`                                       |
-
-#### Опции для команды `crawl`
-
-| Опция                         | Описание                                                      | Значение по умолчанию                     |
-|-------------------------------|---------------------------------------------------------------|-------------------------------------------|
-| `-t, --use_tor`                | Укажите эту опцию, если нужно использовать Tor для парсинга   | `-`                                       |
-| `--headless`                   | Укажите эту опцию, если запустить бразуер в headless режиме   | `-`                                       |
-| `-d, --delay <number>`         | Укажите эту опцию, если нужно добавить делей между запросами  | `0`                                       |
-| `--frontier_state <path>`      | Укажите эту опцию, если нужно указать путь к существующей дб фронтира    | `data/frontier.db`  |
-| `--clear_history`              | Укажите эту опцию, если при инициализации фронтира хотите начать обход для данной коллекции с начала   | `-`  |
-| `--use_database`               | Укажите эту опцию, если метаданные нужно сохраняться в базу данных   | `-`  |
-| `--simulate_mouse`             | Укажите эту опцию, если нужно запустить симуляцию движения мыши в браузере   | `-`  |
-
-| Тестовые опции                | Описание                                                      | Значение по умолчанию                     |
-|-------------------------------|---------------------------------------------------------------|-------------------------------------------|
-| `--handle_cloudflare`         | Запускает обнаружение и последующую обработку обхода cloudflare   | `-`  |
-| `-s, --upload_ssh`            | Укажите эту опцию, если нужно загружать исходные данные через SSH | `-`  |
-| `-p, --download_pdf`          | Укажите эту опцию, если хотите загружать PDF-файлы                | `-`                                       |
-| `-a, --open_access`           | Укажите эту опцию, если нужно проверять доступность перед загрузкой | `-`                                     |
-
-#### Опции для команды `parsing`
-
-| Опция                         | Описание                                                      | Значение по умолчанию                     |
-|-------------------------------|---------------------------------------------------------------|-------------------------------------------|
-| (Нет опций для этой команды)   |                                                               |                                           |
-
-### Пример использования
+## Installation
 
 ```bash
-# Пример запуска команды в режиме разработки
-npx ts-node crawl -c my_collection -o /path/to/output
-
-# Пример запуска команды crawl с использованием Tor и загрузкой PDF в готовом проекте
-cd /path/to/build/project
-node main.js crawl -c my_collection -o /path/to/output -p -t
+npm install
 ```
 
-### Использование базы данных для сохранения метаданных
+## Running In Development
 
-Для использования базы данных нужно создать .env файл в котором нужно указать доступ к бд
+Use `ts-node` directly:
 
-Пример файла:
+```bash
+npx ts-node main.ts crawl \
+  -c my_collection \
+  -o ./output \
+  -e ./tasks/sample_task.json \
+  -l ./your_links_file.txt \
+  --headless
+```
+
+## Building And Running Production Build
+
+Build TypeScript:
+
+```bash
+npm run build
+```
+
+Run compiled JavaScript:
+
+```bash
+node dist/main.js crawl \
+  -c my_collection \
+  -o ./output \
+  -e ./tasks/sample_task.json \
+  -l ./your_links_file.txt \
+  --headless
+```
+
+You can also use:
+
+```bash
+npm run start -- crawl -c my_collection -o ./output -e ./tasks/sample_task.json -l ./your_links_file.txt --headless
+```
+
+## CLI
+
+Global options:
+
+- `-c, --coll_name <string>`: collection name (default: `default_host_name`)
+- `-o, --output <path>`: output directory
+- `-e, --task <path>`: task JSON path
+- `-l, --links <path>`: seed links file path
+- `-h, --HELP`: extended help
+
+`crawl` command options:
+
+- `--headless`: run browser in headless mode
+- `-t, --use_tor`: route crawling through Tor (requires Tor/Privoxy setup)
+- `-d, --delay <number>`: delay between processed URLs in ms
+- `--use_database`: save extracted metadata to ArangoDB
+- `--frontier_state <path>`: path to SQLite frontier DB
+- `--clear_history`: clear URLs history for selected collection in frontier
+- `--browser_config <path>`: path to browser JSON config
+
+`parsing` command currently exists as a placeholder and is not fully implemented.
+
+## Task Configuration
+
+A task file defines:
+
+- `crawl_rules`: URL pattern matching and next-link extraction rules
+- `metadata_extraction`: extraction rules for target pages
+- `links_transformation` (optional): URL transformation rules
+- `interactions` (optional): pre/post interaction steps
+
+Example task files:
+
+- `tasks/sample_task.json`
+- `tasks/emerald_test_task.json`
+
+## Seed Links File
+
+A plain text file with one URL per line.
+
+Example:
+
 ```txt
-DATABASE_TYPE=arango #postgres/arango
+https://www.emerald.com/journals/pages/journals_a-z
+```
 
-#PostgresDB config
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=crawler_db
-POSTGRES_TABLE=crawled_metadata #by default using collection name for table
+## ArangoDB Configuration
 
-# ArangoDB config
+Create `.env` in project root:
+
+```env
+DATABASE_TYPE=arango
+
 ARANGO_URL=http://localhost:8529
 ARANGO_DB=crawler_db
 ARANGO_COLLECTION=crawled_data
 ARANGO_USER=root
 ARANGO_PASSWORD=your_password
 ```
+
+Then run crawler with `--use_database`.
+
+## Tor And Privoxy Setup (Optional)
+
+Install packages:
+
+```bash
+sudo apt-get install tor privoxy
+```
+
+### Tor config
+
+Add to `/etc/tor/torrc`:
+
+```txt
+ControlPort 9051
+CookieAuthentication 0
+```
+
+(If needed) allow cookie access:
+
+```bash
+sudo chmod +r /run/tor/control.authcookie
+```
+
+### Privoxy config
+
+Add to `/etc/privoxy/config`:
+
+```txt
+forward-socks5 / 127.0.0.1:9050 .
+```
+
+Start services:
+
+```bash
+sudo service tor start
+sudo service privoxy start
+```
+
+## Output
+
+For each collection, Fetchlee creates:
+
+- `jsons/`: extracted metadata
+- `htmls/`: saved HTML pages
+- `remaining_links.txt`: copied seed file
+
+## Notes
+
+- Respect website terms of service and robots policies.
+- Add sensible delays and scope your crawl patterns responsibly.
