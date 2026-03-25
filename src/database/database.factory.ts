@@ -1,14 +1,12 @@
 import { DatabaseClient } from './database.interface';
-import { PostgresClient } from './postgres.client';
 import { ArangoClient } from './arangodb.client';
+import { DatabaseConfig } from './database.interface';
 
-export type DatabaseType = 'postgres' | 'arango';
+export type DatabaseType = 'arango';
 
 export class DatabaseFactory {
-    static createClient(type: DatabaseType, config: any): DatabaseClient {
+    static createClient(type: DatabaseType, config: DatabaseConfig): DatabaseClient {
         switch (type) {
-            case 'postgres':
-                return new PostgresClient(config);
             case 'arango':
                 return new ArangoClient(config);
             default:

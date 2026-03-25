@@ -29,20 +29,23 @@
       }
     }
     ],
-    "actions_before_extraction": [
-      {
-        "url_pattern": ".*academic.oup.com/ajhp/issue/.*",
-        "actions": [
-          "document.querySelector('.issue-title').scrollIntoView()"
-        ]
-      }
-    ],
-    "actions_after_extraction": [
-      {
-        "url_pattern": ".*academic.oup.com/ajhp/issue/.*",
-        "actions": [
-          "document.querySelector('.issue-title').scrollIntoView()"
-        ]
-      }
-    ]
+    "interactions": {
+      "pre": [
+        {
+          "url_pattern": ".*academic.oup.com/ajhp/issue/.*",
+          "rules": [
+            {
+              "name": "scroll-to-issue-title",
+              "actions": [
+                {
+                  "type": "scroll",
+                  "target": ".issue-title"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "post": []
+    }
   }
